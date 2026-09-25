@@ -11,6 +11,7 @@ import gradio as gr
 
 from mosaic import __version__
 from mosaic.config import get_settings
+from mosaic.gpu import gpu_ready  # noqa: F401  (ZeroGPU needs a @spaces.GPU function at startup)
 from mosaic.logging_setup import setup_logging
 
 
