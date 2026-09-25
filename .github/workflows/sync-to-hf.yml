@@ -33,6 +33,7 @@ jobs:
               commit_message=f"Deploy {os.environ['GITHUB_SHA'][:7]}",
               ignore_patterns=[".git/*", ".github/*", "docs/*", "tests/*", "eval/*",
                                ".env", ".env.*", "**/.DS_Store", "**/__pycache__/*"],
-              delete_patterns=["src/**", "assets/**"],
+              delete_patterns=["src/**", "assets/**", "Dockerfile", ".dockerignore",
+                               ".pre-commit-config.yaml"],
           )
           PY

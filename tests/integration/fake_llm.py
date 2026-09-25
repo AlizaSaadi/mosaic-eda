@@ -277,3 +277,123 @@ class FakeVisionModels:
 class FakeVisionClient:
     def __init__(self, api_key=None):
         self.models = FakeVisionModels()
+
+
+# ---- audio datasets ----
+
+
+class AudioScriptedLLM(ScriptedLLM):
+    """Answers the audio prompts; review and revision reuse the table behavior."""
+
+    def _triage(self) -> dict:
+        return {
+            "dataset_description": "Spoken commands: yes, no, stop.",
+            "focus_areas": ["label mismatches", "silence", "duplicates"],
+            "target_column": None,
+        }
+
+    def _plan(self, text: str) -> dict:
+        return {
+            "summary": "Remove unusable and duplicate clips; flag mislabels; make formats uniform.",
+            "ops": [
+                {
+                    "op": "remove_corrupt",
+                    "rationale": "Undecodable.",
+                    "evidence": ["aud_overview_001"],
+                },
+                {
+                    "op": "drop_exact_duplicates",
+                    "rationale": "Copies.",
+                    "evidence": ["aud_dupes_001"],
+                },
+                {
+                    "op": "drop_near_duplicates",
+                    "rationale": "Re-encoded copies.",
+                    "evidence": ["aud_dupes_001"],
+                },
+                {
+                    "op": "drop_silent",
+                    "rationale": "Silent clips.",
+                    "evidence": ["aud_quality_001"],
+                },
+                {
+                    "op": "flag_suspected_mislabels",
+                    "params": {"files": ["stop/stop_005.wav", "yes/yes_012.wav"]},
+                    "rationale": "Transcript doesn't match label.",
+                    "evidence": ["aud_transcripts_001"],
+                },
+                {"op": "to_mono", "rationale": "One stereo file."},
+                {"op": "resample", "params": {"sample_rate": 16000}, "rationale": "Mixed rates."},
+                {"op": "convert_to_wav", "rationale": "One format."},
+            ],
+        }
+
+    def _findings(self, text: str) -> dict:
+        mismatches = _num(r"in (\d+) clips \(label_mismatches", text)
+        ratio = _num(r"largest/smallest ratio ([\d.]+)", text)
+        first = not self._state.get("findings_attempted")
+        self._state["findings_attempted"] = True
+        claimed = round(ratio + 2, 2) if first else round(ratio, 2)
+        return {
+            "findings": [
+                {
+                    "title": "Revenue is heavily right-skewed",
+                    "severity": "warning",
+                    "statement": f"The largest class is {claimed} times the smallest.",
+                    "evidence": ["aud_balance_001"],
+                    "claimed_metrics": [{"key": "imbalance_ratio", "value": claimed}],
+                },
+                {
+                    "title": "Clips that don't say their label",
+                    "severity": "critical",
+                    "statement": f"Transcripts of {int(mismatches)} clips don't match their label.",
+                    "evidence": ["aud_transcripts_001"],
+                    "claimed_metrics": [{"key": "label_mismatches", "value": mismatches}],
+                },
+                {
+                    "title": "One copy of a clip",
+                    "severity": "info",
+                    "statement": "An exact duplicate clip was found.",
+                    "evidence": ["aud_dupes_001"],
+                    "claimed_metrics": [],
+                },
+            ]
+        }
+
+
+class FakeListenModels:
+    def generate_content(self, model, contents, config):
+        from types import SimpleNamespace
+
+        from mosaic.audio.listen import ClipReview, ListenReport
+
+        count = len(re.findall(r"Clip (\d+):", contents[0]))
+        report = ListenReport(
+            clips=[
+                ClipReview(
+                    clip=n,
+                    description="a short spoken word",
+                    speech=True,
+                    speakers=1,
+                    background="quiet",
+                )
+                for n in range(1, count + 1)
+            ],
+            overall="Short spoken commands.",
+        )
+        return SimpleNamespace(parsed=report, text=report.model_dump_json())
+
+
+class FakeListenClient:
+    def __init__(self, api_key=None):
+        self.models = FakeListenModels()
+
+
+def fake_whisper(expected: dict):
+    """Returns the known transcript for each clip, in the order the adapter sends them."""
+    order = sorted(expected)
+
+    def engine(clips):
+        return [(expected[p], "en") for p in order[: len(clips)]]
+
+    return engine, "fake-whisper"

@@ -21,6 +21,7 @@ from mosaic.workspace import create_workspace, sweep_stale
 
 EXAMPLE_CSV = PROJECT_ROOT / "examples" / "datasets" / "messy_sales.csv"
 EXAMPLE_IMAGES = PROJECT_ROOT / "examples" / "datasets" / "shapes_dataset.zip"
+EXAMPLE_AUDIO = PROJECT_ROOT / "examples" / "datasets" / "speech_commands.zip"
 MAX_PLOTS = 4
 POLL_SECONDS = 0.6
 
@@ -212,18 +213,18 @@ def build_app() -> gr.Blocks:
         gr.Markdown(
             "# MOSAIC EDA\n"
             "**Multimodal Orchestrated System for Analysis, Inspection & Cleaning.** "
-            "Drop in a messy table or a zip of images. A crew of AI agents plans the cleaning, "
-            "the code checks every plan and every number, and you get a report, the cleaned "
-            "data, and a pipeline script you can rerun.\n\n"
-            "This version analyzes tables (CSV, Excel, JSON Lines) and image datasets (a zip "
-            "with one folder per class). Audio, text, and video are coming next. "
+            "Drop in a messy table, or a zip of images or audio. A crew of AI agents plans the "
+            "cleaning, the code checks every plan and every number, and you get a report, the "
+            "cleaned data, and a pipeline script you can rerun.\n\n"
+            "This version analyzes tables (CSV, Excel, JSON Lines), and image and audio "
+            "datasets (a zip with one folder per class). Text and video are coming next. "
             "*Uses the Gemini free tier: don't upload sensitive data.*"
         )
         with gr.Row():
             with gr.Column(scale=2):
                 with gr.Tab("Upload"):
                     upload = gr.File(
-                        label="CSV, Excel, JSON Lines, an image, or a zip",
+                        label="CSV, Excel, JSON Lines, an image, an audio clip, or a zip",
                         file_types=[
                             ".csv",
                             ".tsv",
@@ -236,6 +237,11 @@ def build_app() -> gr.Blocks:
                             ".jpeg",
                             ".png",
                             ".webp",
+                            ".wav",
+                            ".mp3",
+                            ".m4a",
+                            ".flac",
+                            ".ogg",
                         ],
                         type="filepath",
                     )
@@ -257,6 +263,7 @@ def build_app() -> gr.Blocks:
                 run_btn = gr.Button("Analyze", variant="primary")
                 example_btn = gr.Button("Try the messy sales CSV example")
                 image_example_btn = gr.Button("Try the messy image dataset example")
+                audio_example_btn = gr.Button("Try the messy audio dataset example")
                 runs_left = gr.Markdown(runs_left_text(settings))
             with gr.Column(scale=3):
                 feed = gr.Chatbot(label="Agent room", height=460)
@@ -265,7 +272,7 @@ def build_app() -> gr.Blocks:
         with gr.Row():
             plots = [gr.Plot(visible=False) for _ in range(MAX_PLOTS)]
         gallery = gr.Gallery(
-            label="Contact sheets reviewed by the vision model",
+            label="Contact sheets or spectrograms",
             visible=False,
             columns=2,
             height="auto",
@@ -285,6 +292,9 @@ def build_app() -> gr.Blocks:
         ).then(run_analysis, [upload, url, goal, user_key], outputs)
         image_example_btn.click(
             lambda: (str(EXAMPLE_IMAGES), "Train an image classifier"), None, [upload, goal]
+        ).then(run_analysis, [upload, url, goal, user_key], outputs)
+        audio_example_btn.click(
+            lambda: (str(EXAMPLE_AUDIO), "Train a keyword-spotting model"), None, [upload, goal]
         ).then(run_analysis, [upload, url, goal, user_key], outputs)
     return demo
 

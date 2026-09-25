@@ -32,6 +32,8 @@ plan_cleaning:
     - Start with standardize_null_tokens on all columns, then fix types
       (strip_currency, parse_percent, cast_numeric, parse_dates, parse_boolean).
     - Use mark_as_id for identifier columns.
+    - Convert a column's type before any step that needs numbers (impute_median,
+      winsorize, flag_outliers): those steps fail on text columns.
     - Before imputing a column with more than 5% missing, add_missing_indicator.
     - Prefer flag_outliers or winsorize over deleting rows.
     - Destructive operations must cite evidence IDs that justify them.
@@ -69,6 +71,9 @@ analyze:
     - Take numbers from the evidence and round them to 1-2 decimals in the statement
       (for example 24.76%, not 24.7573%). Use the same rounded value in claimed_metrics.
     - Counts need keys too, for example 'duplicate_rows' or 'region.hidden_missing'.
+    - A key is the path inside ONE artifact, without the artifact ID: write
+      {"key": "score", ...} and cite "tbl_quality_002", not "tbl_quality_002.score".
+    - Scores are out of 100: write "91.6 out of 100"; the 100 needs no key.
     - Describe associations, not causes.
 
     Example of one valid finding:
@@ -126,7 +131,12 @@ review:
       values, duplicates, class imbalance, unparseable values)?
     - Clarity: would a busy data scientist understand it and know what to do?
 
-    Approve when there are no blocking issues. Keep issues specific and fixable.
+    {previous_review}
+
+    Approve when there are no blocking issues. Keep issues specific and fixable. In a
+    second or later review, check whether your earlier requests were addressed; don't
+    raise new minor points. Only list something as missed if the evidence clearly shows
+    an important problem that no finding mentions.
   expected_output: >
     JSON with approved (true/false), issues: a list of {"finding" (number), "kind",
     "problem", "fix_request", "blocking"} objects, and missed: a list of short strings.

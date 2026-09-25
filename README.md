@@ -17,8 +17,8 @@ short_description: Agents that clean, explore, and fact-check any dataset
 A crew of AI agents, built with [CrewAI](https://www.crewai.com/), that cleans, explores, and
 fact-checks any dataset: tables, text, images, audio, and video, or a zip of them.
 
-> Status: tables and image datasets work end to end, with review and revision loops
-> (Phase 4). Audio, text, and video are next.
+> Status: tables, image, and audio datasets work end to end, with review and revision
+> loops (Phase 5). Text and video are next.
 > The full design is in [`docs/MOSAIC-EDA-Blueprint.pdf`](docs/MOSAIC-EDA-Blueprint.pdf).
 
 ## How it works (short version)
@@ -42,13 +42,6 @@ pip install -r requirements.txt -r requirements-dev.txt
 cp .env.example .env          # then add your GEMINI_API_KEY
 python -m mosaic.llm.key_check   # one test request per model
 python app.py                 # http://127.0.0.1:7860
-```
-
-Or with Docker:
-
-```bash
-docker build -t mosaic-eda .
-docker run -p 7860:7860 --env-file .env mosaic-eda
 ```
 
 ## Tests

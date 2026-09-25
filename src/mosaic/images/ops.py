@@ -49,8 +49,9 @@ class MaxSideParams(NoParams):
     max_side: int = Field(512, ge=32, le=4096)
 
 
+# Paths must exist in the original dataset (a file removed by an earlier step is fine)
 _CHECK_FILES = (
-    "_unknown = sorted(set({files!r}) - set(df['path']))\n"
+    "_unknown = sorted(set({files!r}) - ORIGINAL_PATHS)\n"
     "assert not _unknown, f'unknown files (use exact paths from the evidence): {{_unknown[:5]}}'\n"
 )
 

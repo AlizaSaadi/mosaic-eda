@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import json
 import math
+import re
 import threading
 from collections import defaultdict
 from pathlib import Path
@@ -119,8 +120,47 @@ class EvidenceStore:
         return None
 
     def lookup_all(self, artifact_ids: list[str], key: str) -> list[Any]:
-        """Every value for `key` across the cited artifacts (one per artifact at most)."""
-        return [v for a in artifact_ids if (v := self.lookup([a], key)) is not None]
+        """Every value for `key` across the cited artifacts (one per artifact at most).
+
+        Tolerant of how agents write keys: a leading artifact ID ("img_balance_001.score"),
+        different case, or parts in another order ("share.triangles" for
+        "classes.triangles.share") are accepted when they point to exactly one value.
+        """
+        values = []
+        for artifact_id in artifact_ids:
+            k = key.strip()
+            if k.lower().startswith(artifact_id.lower() + "."):
+                k = k[len(artifact_id) + 1 :]
+            items = self._list_items(artifact_id, k)
+            if items:  # a list of numbers ("sample_rates_khz"): any item can be claimed
+                values.extend(items)
+                continue
+            value = self.lookup([artifact_id], k)
+            if value is None:
+                value = self._fuzzy_lookup(artifact_id, k)
+            if value is not None:
+                values.append(value)
+        return values
+
+    def _list_items(self, artifact_id: str, key: str) -> list[Any]:
+        artifact = self._items.get(artifact_id)
+        value = artifact.data.get(key) if artifact else None
+        if isinstance(value, list) and all(isinstance(v, (int, float)) for v in value):
+            return list(value)
+        return []
+
+    def _fuzzy_lookup(self, artifact_id: str, key: str) -> Any:
+        artifact = self._items.get(artifact_id)
+        if artifact is None or not key:
+            return None
+        wanted = [p for p in re.split(r"[._]", key.lower()) if p]
+        matches = {
+            path: v
+            for path, v in flatten(artifact.data).items()
+            if all(p in re.split(r"[._]", path.lower()) for p in wanted)
+        }
+        unique = {json.dumps(v, sort_keys=True, default=str) for v in matches.values()}
+        return next(iter(matches.values())) if len(unique) == 1 else None
 
     def find_value(
         self,
@@ -138,10 +178,16 @@ class EvidenceStore:
             for key, v in flatten(artifact.data).items():
                 if isinstance(v, bool) or not isinstance(v, (int, float)):
                     continue
-                if abs(v - value) <= max(rel_tol * abs(v), abs_tol):
+                parent, _, last = key.rpartition(".")
+                # numbers used as keys ("sample_rates.16000"); 1000+ so list indexes don't count
+                if parent and last.isdigit() and int(last) >= 1000 and int(last) == value:
+                    hits.append((artifact.id, parent))
+                elif abs(v - value) <= max(rel_tol * abs(v), abs_tol):
                     hits.append((artifact.id, key.removeprefix("columns.")))
-                    if len(hits) >= limit:
-                        return hits
+                else:
+                    continue
+                if len(hits) >= limit:
+                    return hits
         return hits
 
     def brief(self, kinds: tuple[str, ...] = ()) -> str:

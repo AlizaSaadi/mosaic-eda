@@ -62,13 +62,22 @@ def test_fact_check_rejects_then_accepts(run_flow):
     assert rt.reporter.counters["facts_verified"] == 2
 
 
-def test_non_table_input_is_reported_as_unsupported(run_flow, tmp_path):
-    wav = tmp_path / "clip.wav"
-    wav.write_bytes(b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 64)
-    state, _, shared = run_flow(wav)
+def test_unsupported_input_is_reported(run_flow, tmp_path):
+    mp4 = tmp_path / "clip.mp4"
+    mp4.write_bytes(b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" + b"\x00" * 64)
+    state, _, shared = run_flow(mp4)
     assert state.status == "unsupported"
     assert "coming next" in state.error
     assert not shared.get("calls")  # no model calls for unsupported input
+
+
+def test_undecodable_audio_fails_with_a_clear_message(run_flow, tmp_path):
+    wav = tmp_path / "clip.wav"
+    wav.write_bytes(b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 64)
+    state, _, shared = run_flow(wav)
+    assert state.status == "failed"
+    assert "could be decoded" in state.error
+    assert not shared.get("calls")
 
 
 def test_bad_link_fails_cleanly_without_model_calls(run_flow):

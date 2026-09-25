@@ -65,6 +65,8 @@ def execute_plan(
     namespace, and unit (images work on a table of files, one row per image).
     """
     catalog = catalog or OPS
+    if namespace is not None and "path" in df.columns:  # file-based data: see _CHECK_FILES
+        namespace = {**namespace, "ORIGINAL_PATHS": set(df["path"])}
     work = df.copy()
     run = PlanRun(df=work)
     start_rows = len(df)
@@ -91,7 +93,14 @@ def execute_plan(
         try:
             after = run_code(code, before.copy(), namespace)
         except Exception as exc:
-            run.errors.append(f"{label} failed: {type(exc).__name__}: {str(exc)[:200]}")
+            text = str(exc)
+            hint = ""
+            if "string dtype" in text or "could not convert" in text:
+                hint = (
+                    " The column is still text: convert it first (cast_numeric, "
+                    "strip_currency, or parse_percent)."
+                )
+            run.errors.append(f"{label} failed: {type(exc).__name__}: {text[:200]}.{hint}")
             continue
         new_missing: dict[str, int] = {}
         if op.op in CONVERSIONS and catalog is OPS:

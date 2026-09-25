@@ -128,7 +128,7 @@ class EDAFlow(Flow[EDAState]):
         if adapter is None:
             found = ", ".join(f"{n} {m.value}" for m, n in manifest.counts.items())
             self._fail(
-                f"Found {found}. This version analyzes tables and images; audio, text, and "
+                f"Found {found}. This version analyzes tables, images, and audio; text and "
                 "video are coming next.",
                 "unsupported",
             )
@@ -146,7 +146,11 @@ class EDAFlow(Flow[EDAState]):
         self._crew = adapter.crew_cls(
             self._rt.llm_for, self._guard, retries=2, n_findings=lambda: len(self.state.findings)
         )
-        described = adapter.load(manifest)
+        try:
+            described = adapter.load(manifest)
+        except ValueError as exc:
+            self._fail(str(exc))
+            return
         self._step("Data loaded", described, "done")
         self._timed("ingest", t0)
 
@@ -202,7 +206,7 @@ class EDAFlow(Flow[EDAState]):
             return
         brief = parse_output(result.tasks_output[0], TriageBrief)
         self.state.triage = brief.model_dump()
-        if brief.target_column:
+        if brief.target_column and self._adapter.columns:
             self.state.target = brief.target_column
         self._step("Triage done", brief.dataset_description, "done")
         self._timed("triage", t0)
@@ -256,7 +260,8 @@ class EDAFlow(Flow[EDAState]):
         outputs, quality, items = self._adapter.apply(plan, run)
         self.state.quality_clean, self.state.rows_after = quality, items
         self.state.outputs.update(outputs)
-        self._rt.reporter.count("tool_runs", 2)
+        self._record_cleaning_summary(run)
+        self._rt.reporter.count("tool_runs", 3)
         self._step(
             "Cleaned and re-profiled",
             f"quality {self.state.quality_raw} -> {self.state.quality_clean}; "
@@ -264,6 +269,32 @@ class EDAFlow(Flow[EDAState]):
             "done",
         )
         self._timed("apply_cleaning", t0)
+
+    def _record_cleaning_summary(self, run) -> None:
+        """Evidence for "cleaning removed N items", which agents naturally want to say."""
+        unit = self.state.unit
+        before, after = self.state.rows_before, self.state.rows_after
+        per_step = {f"{s.index}_{s.op}": s.rows_before - s.rows_after for s in run.steps}
+        removed_by = "; ".join(
+            f"step {k.replace('_', ' ', 1)} removed {v}" for k, v in per_step.items() if v
+        )
+        self._rt.store.add(
+            "cleaning_summary",
+            "profile",
+            "cleaning_summary",
+            f"Cleaning result: {unit} {before} -> {after} (keys before, after, removed = "
+            f"{before - after}; quality score {self.state.quality_raw} -> "
+            f"{self.state.quality_clean}: keys quality_before, quality_after). "
+            f"{removed_by or 'No step removed anything.'} (keys removed_by_step.<n>_<op>)",
+            {
+                "before": before,
+                "after": after,
+                "removed": before - after,
+                "quality_before": self.state.quality_raw,
+                "quality_after": self.state.quality_clean,
+                "removed_by_step": per_step,
+            },
+        )
 
     def _cleaning_log(self) -> str:
         run = self._guard.plan_run
@@ -348,6 +379,7 @@ class EDAFlow(Flow[EDAState]):
                 "findings": self._numbered_findings(),
                 "sample_note": "; ".join(n for n in self.state.notes if "sample" in n)
                 or "The full dataset was analyzed (no sampling).",
+                "previous_review": self._previous_review_text(),
             },
             fatal=False,
         )
@@ -374,6 +406,14 @@ class EDAFlow(Flow[EDAState]):
             self._rt.reporter.emit("review", title, "\n".join(lines), "rejected")
         self._timed(f"review_{len(self.state.review_history)}", t0)
 
+    def _previous_review_text(self) -> str:
+        if not self.state.review_history:
+            return "This is the first review."
+        last = self.state.review_history[-1]
+        lines = [f"- Finding {i['finding']}: {i['fix_request']}" for i in last["issues"]]
+        lines += [f"- Add: {m}" for m in last["missed"]]
+        return "Your previous review asked for:\n" + ("\n".join(lines) or "- nothing")
+
     @router(review)
     def review_gate(self) -> str:
         if not self._ok():
@@ -384,8 +424,9 @@ class EDAFlow(Flow[EDAState]):
         if verdict is None:
             return "approved"
         blocking = [i for i in verdict["issues"] if i["blocking"]]
-        if verdict["approved"] and not blocking and not verdict["missed"]:
-            return "approved"
+        wants_additions = bool(verdict["missed"]) and self.state.revision_round == 0
+        if not blocking and (verdict["approved"] or not wants_additions):
+            return "approved"  # later "missed" items become report notes, not more rounds
         if self.state.revision_round < MAX_REVISIONS:
             return "revise"
         return "partial" if blocking else "approved"

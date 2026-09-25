@@ -218,3 +218,104 @@ def test_triage_turns_null_words_into_null(ctx):
             out({"dataset_description": "d", "focus_areas": [], "target_column": word})
         )
         assert ok
+
+
+def test_tolerant_keys_still_need_the_right_value(ctx):
+    ctx.store.add(
+        "img_balance",
+        "profile",
+        "t",
+        "b",
+        {"classes": {"triangles": {"share": 11.38}, "circles": {"share": 56.1}}},
+    )
+    look = ctx.store.lookup_all
+    assert look(["img_balance_001"], "img_balance_001.classes.triangles.share") == [11.38]
+    assert look(["img_balance_001"], "share.triangles") == [11.38]  # parts in another order
+    assert look(["img_balance_001"], "Classes.Triangles.Share") == [11.38]  # case
+    assert look(["img_balance_001"], "share") == []  # ambiguous: two classes have a share
+
+
+def test_scale_denominators_are_not_claims():
+    assert statement_numbers("Quality rose from 79.7/100 to 91.6 out of 100.") == [79.7, 91.6]
+
+
+def test_identifiers_with_digits_are_not_claims():
+    text = "The vision review by gemini-3.5-flash-lite (img_vision_001) flagged 5 files."
+    assert statement_numbers(text) == []
+
+
+def test_underscore_keys_and_bare_artifact_ids(ctx):
+    ctx.store.add(
+        "img_balance",
+        "profile",
+        "t",
+        "b",
+        {"classes": {"triangles": {"share": 11.38}, "circles": {"share": 56.1}}},
+    )
+    assert ctx.store.lookup_all(["img_balance_001"], "circles_share") == [56.1]
+    findings = [
+        finding("Circles are 56.1% of images.", {"img_balance_001": 56.1}, ("img_balance_001",)),
+        *GOOD[1:],
+    ]
+    ok, _ = findings_guardrail(ctx)(out({"findings": findings}))
+    assert ok
+
+
+def test_file_ops_accept_files_removed_by_earlier_steps():
+    from mosaic.audio.ops import AUDIO_OPS, audio_namespace
+    from mosaic.tables.cleaning import execute_plan
+    from mosaic.tables.ops import CleaningOp, CleaningPlan
+
+    paths = ["a.wav", "b.wav", "c.wav", "d.wav", "e.wav"]  # small removals stay under 30%
+    df = pd.DataFrame(
+        {
+            "path": paths,
+            "class": ["x"] * 5,
+            "corrupt": [True] + [False] * 4,
+            "suspected_mislabel": [False] * 5,
+        }
+    )
+    plan = CleaningPlan(
+        summary="s",
+        ops=[
+            CleaningOp(op="remove_corrupt", rationale="r", evidence=["e"]),
+            CleaningOp(op="drop_files", params={"files": ["a.wav"]}, rationale="r", evidence=["e"]),
+        ],
+    )
+    run = execute_plan(plan, df, catalog=AUDIO_OPS, namespace=audio_namespace(), unit="clips")
+    assert run.ok and run.df["path"].tolist() == paths[1:]
+    bad = CleaningPlan(
+        summary="s",
+        ops=[
+            CleaningOp(
+                op="drop_files", params={"files": ["ghost.wav"]}, rationale="r", evidence=["e"]
+            )
+        ],
+    )
+    run = execute_plan(bad, df, catalog=AUDIO_OPS, namespace=audio_namespace(), unit="clips")
+    assert not run.ok and "ghost.wav" in run.errors[0]
+
+
+def test_list_items_and_numeric_keys_are_citable(ctx):
+    ctx.store.add(
+        "aud_overview",
+        "profile",
+        "t",
+        "o",
+        {"sample_rates": {"16000": 20, "22050": 3}, "sample_rates_khz": [16.0, 22.05]},
+    )
+    assert ctx.store.lookup_all(["aud_overview_001"], "sample_rates_khz") == [16.0, 22.05]
+    assert ctx.store.find_value(16000, within=["aud_overview_001"]) == [
+        ("aud_overview_001", "sample_rates")
+    ]
+    assert ctx.store.find_value(1, within=["aud_overview_001"]) == []  # list indexes aren't values
+    findings = [
+        finding(
+            "Clips use 16000 Hz and 22.05 kHz.",
+            {"sample_rates_khz": 22.05},
+            ("aud_overview_001",),
+        ),
+        *GOOD[1:],
+    ]
+    ok, _ = findings_guardrail(ctx)(out({"findings": findings}))
+    assert ok

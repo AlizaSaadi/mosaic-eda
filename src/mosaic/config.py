@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     max_zip_entries: int = 10_000
     max_zip_depth: int = 2
     max_compression_ratio: float = 200.0
+    max_transcribe_seconds: float = 600.0
     workspace_root: Path = Path(tempfile.gettempdir()) / "mosaic-jobs"
     job_ttl_minutes: int = 60
 

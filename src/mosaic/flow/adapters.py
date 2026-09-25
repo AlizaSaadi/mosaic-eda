@@ -15,6 +15,14 @@ from typing import Any
 import pandas as pd
 from PIL import Image
 
+from mosaic.audio import pipeline_helpers as audio_helpers
+from mosaic.audio.listen import listening_review, pick_clips
+from mosaic.audio.ops import AUDIO_OPS, audio_namespace
+from mosaic.audio.pipeline_helpers import build_table as build_audio_table
+from mosaic.audio.pipeline_helpers import decode, export_audio
+from mosaic.audio.profile import AudioProfile, profile_audio
+from mosaic.audio.transcribe import transcribe_clips
+from mosaic.crews.audio.crew import AudioCrew
 from mosaic.crews.image.crew import ImageCrew
 from mosaic.crews.table.crew import TableCrew
 from mosaic.flow.runtime import JobRuntime
@@ -136,7 +144,17 @@ def _thumb_b64(path: Path, size: int = 96) -> str:
     return base64.b64encode(buf.getvalue()).decode()
 
 
-def image_pipeline_script(plan: CleaningPlan, run: PlanRun, source: str) -> str:
+def file_pipeline_script(
+    plan: CleaningPlan,
+    run: PlanRun,
+    source: str,
+    *,
+    kind: str,
+    helpers: Any,
+    imports: str,
+    export_call: str,
+) -> str:
+    """cleaning_pipeline.py for folder datasets: build the file table, clean, export."""
     steps = []
     for s in run.steps:
         comment = f"    # Step {s.index}: {s.op} [{s.risk}] - {s.rationale}".replace("\n", " ")
@@ -147,33 +165,54 @@ def image_pipeline_script(plan: CleaningPlan, run: PlanRun, source: str) -> str:
 Source: {source}
 Plan: {plan.summary}
 
-Rerun it on the full image folder (class = first folder level):
-    python cleaning_pipeline.py path/to/images cleaned_images
+Rerun it on the full {kind} folder (class = first folder level):
+    python cleaning_pipeline.py path/to/{kind} cleaned_{kind}
 """
 
-import hashlib
-import sys
-from pathlib import Path
+{imports}
 
-import numpy as np
-import pandas as pd
-from PIL import Image, ImageOps
-
-{helpers_source(image_helpers)}
+{helpers_source(helpers)}
 
 
 def clean(df):
+    ORIGINAL_PATHS = set(df["path"])  # file checks accept files removed by earlier steps
 {body}
     return df
 
 
 if __name__ == "__main__":
-    source = Path(sys.argv[1] if len(sys.argv) > 1 else "images")
-    target = Path(sys.argv[2] if len(sys.argv) > 2 else "cleaned_images")
+    source = Path(sys.argv[1] if len(sys.argv) > 1 else "{kind}")
+    target = Path(sys.argv[2] if len(sys.argv) > 2 else "cleaned_{kind}")
     df = clean(build_table(source))
-    export_images(df, source, target)
-    print(f"Saved {{len(df)}} images to", target)
+    {export_call}(df, source, target)
+    print(f"Saved {{{{len(df)}}}} files to", target)
 '''
+
+
+def image_pipeline_script(plan: CleaningPlan, run: PlanRun, source: str) -> str:
+    return file_pipeline_script(
+        plan,
+        run,
+        source,
+        kind="images",
+        helpers=image_helpers,
+        export_call="export_images",
+        imports="import hashlib\nimport sys\nfrom pathlib import Path\n\nimport numpy as np\n"
+        "import pandas as pd\nfrom PIL import Image, ImageOps",
+    )
+
+
+def audio_pipeline_script(plan: CleaningPlan, run: PlanRun, source: str) -> str:
+    return file_pipeline_script(
+        plan,
+        run,
+        source,
+        kind="audio",
+        helpers=audio_helpers,
+        export_call="export_audio",
+        imports="import hashlib\nimport re\nimport shutil\nimport subprocess\nimport sys\n"
+        "from pathlib import Path\n\nimport numpy as np\nimport pandas as pd",
+    )
 
 
 class ImageAdapter(Adapter):
@@ -207,6 +246,11 @@ class ImageAdapter(Adapter):
         else:
             rel = [(f.path, f.group) for f in sample.files]
         self.df = build_table(self.root, rel)
+        if self.df["corrupt"].all():
+            raise ValueError(
+                "None of the images could be opened. Check that they're valid "
+                "JPEG, PNG, WebP, or GIF files."
+            )
         return f"{self.total} images in {len([c for c in self.class_counts if c])} classes" + (
             f" ({len(sample.files)} sampled)" if sample.is_sample else ""
         )
@@ -352,7 +396,208 @@ class ImageAdapter(Adapter):
         return items
 
 
+# ---------------------------------------------------------------- audio
+
+
+class AudioAdapter(Adapter):
+    modality = "audio"
+    unit = "clips"
+    crew_cls = AudioCrew
+
+    def load(self, manifest: FileManifest) -> str:
+        files = manifest.files_of(Modality.AUDIO)
+        self.root = Path(manifest.root)
+        self.class_counts = dict(Counter(f.group for f in files))
+        self.total = len(files)
+        sample = stratified_sample(files, Modality.AUDIO, self.rt.settings.max_sampled_files)
+        if sample.is_sample:
+            self.notes.append(
+                f"Analyzed a stratified sample of {len(sample.files)} of "
+                f"{self.total} clips (by folder)."
+            )
+        tops = {f.path.split("/")[0] for f in files}
+        if len(tops) == 1 and all(f.path.count("/") >= 2 for f in files):
+            wrapper = tops.pop()
+            self.root = self.root / wrapper
+            rel = [(f.path[len(wrapper) + 1 :], f.group) for f in sample.files]
+        else:
+            rel = [(f.path, f.group) for f in sample.files]
+        self.df = build_audio_table(self.root, rel)
+        if self.df["corrupt"].all():
+            raise ValueError(
+                "None of the audio files could be decoded. Check that they're "
+                "valid WAV, MP3, M4A, OGG, or FLAC files."
+            )
+        seconds = float(self.df["duration_s"].fillna(0).sum())
+        return (
+            f"{self.total} clips ({seconds:.0f} seconds) in "
+            f"{len([c for c in self.class_counts if c])} classes"
+        )
+
+    def profile_raw(self, goal: str) -> tuple[float, str | None, int]:
+        reporter = self.rt.reporter
+        ok = self.df[~self.df["corrupt"]]
+        engine = self.rt.transcriber
+        reporter.emit("step", "Transcribing speech", "Whisper, with voice detection", "running")
+        try:
+            clips = [(p, decode(self.root / p)) for p in ok["path"]]
+            self.transcripts = transcribe_clips(
+                clips,
+                self.rt.settings.max_transcribe_seconds,
+                engine=engine[0] if engine else None,
+                engine_name=engine[1] if engine else "",
+            )
+            reporter.emit(
+                "step",
+                "Transcription done",
+                f"{self.transcripts.engine}: {self.transcripts.seconds} s of audio",
+                "done",
+            )
+            if self.transcripts.skipped_budget:
+                self.notes.append(
+                    f"{len(self.transcripts.skipped_budget)} clips weren't "
+                    "transcribed because of the time limit."
+                )
+        except Exception as exc:  # the rest of the analysis still works
+            self.transcripts = None
+            self.notes.append("Transcription couldn't run, so speech and labels weren't checked.")
+            reporter.emit("info", "Transcription skipped", str(exc)[:300], "warning")
+        self.raw: AudioProfile = profile_audio(
+            self.df,
+            self.rt.store,
+            root=self.root,
+            work=self.rt.ws.work / "spectrograms",
+            class_counts=self.class_counts,
+            total_clips=self.total,
+            transcripts=self.transcripts,
+        )
+        self.chart_ids = list(self.raw.chart_ids)
+        self._listen()
+        return self.raw.quality, None, len(self.df)
+
+    def _listen(self) -> None:
+        reporter = self.rt.reporter
+        non_speech = []
+        transcript_id = next(
+            (a for a in self.raw.artifact_ids if a.startswith("aud_transcripts")), None
+        )
+        if transcript_id:
+            non_speech = self.rt.store.get(transcript_id).data["non_speech"]
+        problems = {p for files in self.raw.categories.values() for p in files}
+        normal = [p for p in self.df.loc[~self.df["corrupt"], "path"] if p not in problems]
+        clips = pick_clips(self.raw.categories, non_speech, normal)
+        reporter.emit("step", "Listening review", f"{len(clips)} clips in one request")
+        try:
+            listen_id = listening_review(
+                self.rt.store,
+                self.root,
+                clips,
+                tracker=self.rt.tracker,
+                route=self.rt.routes["default"],
+                api_key=self.rt.api_key,
+                on_event=self.rt._on_call,
+                client_factory=self.rt.client_factory,
+            )
+        except Exception as exc:
+            self.notes.append("The listening review couldn't run.")
+            reporter.emit("info", "Listening review skipped", str(exc)[:300], "warning")
+            return
+        if listen_id:
+            self.raw.artifact_ids.append(listen_id)
+            reporter.emit("step", "Listening review done", "", "done")
+
+    @property
+    def guard_df(self) -> pd.DataFrame:
+        return self.df
+
+    @property
+    def columns(self) -> list[str]:
+        return []
+
+    def execute(self, plan: CleaningPlan) -> PlanRun:
+        return execute_plan(
+            plan,
+            self.df,
+            self.rt.store,
+            catalog=AUDIO_OPS,
+            namespace=audio_namespace(),
+            unit="clips",
+        )
+
+    def post_checks(self, run: PlanRun) -> list[str]:
+        before = self.df.groupby("class").size()
+        after = run.df.groupby("class").size().reindex(before.index, fill_value=0)
+        return [
+            f"The plan removes {1 - after[c] / before[c]:.0%} of class '{c}' ({before[c]} -> "
+            f"{after[c]}). Use a gentler threshold or flag instead of dropping."
+            for c in before.index
+            if c and before[c] >= 5 and after[c] < before[c] * (1 - MAX_CLASS_LOSS)
+        ]
+
+    def catalog(self) -> str:
+        return catalog_text(AUDIO_OPS)
+
+    def conservative_plan(self) -> CleaningPlan:
+        return CleaningPlan(
+            summary="Safe-only fallback plan: remove undecodable files and export WAV. "
+            "Nothing else is removed.",
+            ops=[
+                CleaningOp(
+                    op="remove_corrupt",
+                    rationale="Files that can't be decoded.",
+                    evidence=[self.raw.artifact_ids[0]],
+                ),
+                CleaningOp(op="convert_to_wav", rationale="One consistent format."),
+            ],
+        )
+
+    def apply(self, plan: CleaningPlan, run: PlanRun) -> tuple[dict[str, str], float, int]:
+        out = self.rt.ws.out
+        folder = self.rt.ws.work / "cleaned_audio"
+        export_audio(run.df, self.root, folder)
+        shutil.copy(folder / "audio_manifest.csv", out / "audio_manifest.csv")
+        archive = shutil.make_archive(str(out / "cleaned_audio"), "zip", folder)
+        (out / "cleaning_pipeline.py").write_text(
+            audio_pipeline_script(plan, run, self.rt.ws.input.name), encoding="utf-8"
+        )
+        kept = run.df.groupby("class").size().to_dict()
+        self.clean = profile_audio(
+            run.df,
+            self.rt.store,
+            root=self.root,
+            work=self.rt.ws.work / "spectrograms",
+            class_counts=kept,
+            total_clips=len(run.df),
+            stage="clean",
+        )
+        self.chart_ids += self.clean.chart_ids[:1]
+        outputs = {
+            "cleaned": archive,
+            "manifest": str(out / "audio_manifest.csv"),
+            "pipeline": str(out / "cleaning_pipeline.py"),
+        }
+        return outputs, self.clean.quality, len(run.df)
+
+    def report_extras(self) -> dict[str, Any]:
+        store = self.rt.store
+        balance = next((a.data for a in store.all("profile") if a.id == "aud_balance_001"), None)
+        transcripts = next(
+            (a.data for a in store.all("profile") if a.id == "aud_transcripts_001"), None
+        )
+        spectrograms = [
+            {"class": caption, "b64": base64.b64encode(Path(png).read_bytes()).decode()}
+            for png, caption in self.raw.spectrograms
+        ]
+        return {"balance": balance, "spectrograms": spectrograms, "transcripts": transcripts}
+
+    def gallery(self) -> list[tuple[str, str]]:
+        return list(self.raw.spectrograms)
+
+
 def make_adapter(manifest: FileManifest, rt: JobRuntime) -> Adapter | None:
-    return {Modality.TABLE: TableAdapter, Modality.IMAGE: ImageAdapter}.get(
-        manifest.dominant, lambda _rt: None
-    )(rt)
+    adapters = {
+        Modality.TABLE: TableAdapter,
+        Modality.IMAGE: ImageAdapter,
+        Modality.AUDIO: AudioAdapter,
+    }
+    return adapters.get(manifest.dominant, lambda _rt: None)(rt)

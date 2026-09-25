@@ -111,7 +111,7 @@ ul{padding-left:20px} footer{margin-top:40px;color:var(--muted);font-size:13px}
 {% if extras.balance %}
 <h2>Class balance</h2>
 <div class="tbl"><table>
-<tr><th>Class</th><th>Images</th><th>Share %</th></tr>
+<tr><th>Class</th><th>{{ unit|capitalize }}</th><th>Share %</th></tr>
 {% for name, c in extras.balance.classes.items() %}<tr><td><code>{{ name }}</code></td><td>{{ c.count }}</td><td>{{ c.share }}</td></tr>{% endfor %}
 </table></div>
 <p class="ev">Largest class / smallest class: {{ extras.balance.imbalance_ratio }}</p>
@@ -123,6 +123,29 @@ ul{padding-left:20px} footer{margin-top:40px;color:var(--muted);font-size:13px}
 <h3 style="font-size:15px;margin:16px 0 6px">{{ group.category|capitalize }}</h3>
 <div class="thumbs">{% for item in group["items"] %}<figure><img src="data:image/png;base64,{{ item.b64 }}" alt="{{ item.path }}"><figcaption>{{ item.path }}</figcaption></figure>{% endfor %}</div>
 {% endfor %}
+{% endif %}
+
+{% if extras.transcripts %}
+<h2>Transcription</h2>
+<p class="ev">{{ extras.transcripts.engine }} · {{ extras.transcripts.transcribed_seconds }} s of audio · {{ extras.transcripts.clips_with_speech }} clips with speech · {{ extras.transcripts.non_speech_clips }} non-silent clips with no words</p>
+{% if extras.transcripts.mismatches %}
+<h3 style="font-size:15px;margin:16px 0 6px">Clips whose transcript doesn't match the folder label (checked by code)</h3>
+<div class="tbl"><table>
+<tr><th>Clip</th><th>Label</th><th>Heard</th></tr>
+{% for m in extras.transcripts.mismatches %}<tr><td><code>{{ m.path }}</code></td><td>{{ m.label }}</td><td>{{ m.heard }}</td></tr>{% endfor %}
+</table></div>
+{% endif %}
+<h3 style="font-size:15px;margin:16px 0 6px">Sample transcripts</h3>
+<div class="tbl"><table>
+<tr><th>Clip</th><th>Transcript</th></tr>
+{% for path, text in extras.transcripts.examples.items() %}<tr><td><code>{{ path }}</code></td><td>{{ text }}</td></tr>{% endfor %}
+</table></div>
+{% endif %}
+
+{% if extras.spectrograms %}
+<h2>Spectrograms</h2>
+<p class="ev">Time runs left to right, pitch bottom to top, darker is louder.</p>
+{% for sheet in extras.spectrograms %}<figure class="sheet"><img src="data:image/png;base64,{{ sheet.b64 }}" alt="Spectrogram: {{ sheet.class }}"><figcaption>{{ sheet.class }}</figcaption></figure>{% endfor %}
 {% endif %}
 
 {% if extras.sheets %}

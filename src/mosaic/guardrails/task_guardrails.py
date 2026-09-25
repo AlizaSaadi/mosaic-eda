@@ -58,10 +58,16 @@ def close(claimed: float, actual: Any) -> bool:
     return abs(claimed - actual) <= max(REL_TOL * abs(actual), ABS_TOL)
 
 
+# identifiers such as "gemini-3.5-flash-lite" or "tbl_quality_002" contain digits but aren't claims
+IDENTIFIER = re.compile(r"\b[A-Za-z][A-Za-z0-9]*[-_][\w.-]*\d[\w.-]*")
+SCALE = re.compile(r"(?:/|\bout of\s+|\bof\s+)100\b", re.I)
+
+
 def statement_numbers(text: str) -> list[float]:
-    """Numbers a reader would take as facts. Small counts (under 10) and years are exempt."""
+    """Numbers a reader would take as facts. Small counts (under 10), years, and scale
+    denominators ("91.6 out of 100", "79.7/100") are exempt."""
     out = []
-    for token in NUMBER.findall(text):
+    for token in NUMBER.findall(SCALE.sub(" ", IDENTIFIER.sub(" ", text))):
         plain = token.rstrip("%").replace(",", "")
         value = float(plain)
         is_int = "." not in plain and not token.endswith("%")
@@ -86,6 +92,8 @@ def triage_guardrail(ctx: GuardContext) -> Guardrail:
             brief = parse_output(output, TriageBrief)
         except (ValidationError, ValueError) as exc:
             return _reject(ctx, "Triage output isn't valid", [f"Invalid JSON: {str(exc)[:300]}"])
+        if brief.target_column and not ctx.columns:
+            return True, output  # images and other data without columns: the Flow ignores it
         if brief.target_column and brief.target_column not in ctx.columns:
             return _reject(
                 ctx,
@@ -156,6 +164,12 @@ def findings_guardrail(ctx: GuardContext) -> Guardrail:
                 )
             for metric in f.claimed_metrics:
                 key, claimed = metric.key, metric.value
+                # an artifact ID instead of a key: check the value against that artifact
+                if key.strip() in ctx.store and ctx.store.find_value(
+                    claimed, within=[key.strip()], limit=1
+                ):
+                    verified += 1
+                    continue
                 candidates = ctx.store.lookup_all(f.evidence, key)
                 actual = next((c for c in candidates if close(claimed, c)), None)
                 if not candidates:

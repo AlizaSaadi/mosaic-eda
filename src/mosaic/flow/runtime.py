@@ -25,6 +25,7 @@ class JobRuntime:
     routes: dict[str, list[PoolRule]] = field(default_factory=dict)
     models_used: set[str] = field(default_factory=set)
     client_factory: Any = None  # tests inject a fake Gemini client for vision/audio calls
+    transcriber: Any = None  # (engine, name); tests inject a fake Whisper
 
     def __post_init__(self) -> None:
         self.store = self.store or EvidenceStore(self.ws.artifacts)
