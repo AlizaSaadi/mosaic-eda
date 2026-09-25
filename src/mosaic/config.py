@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     max_concurrent_jobs: int = 1
     max_input_mb: int = 200
     max_sampled_files: int = 500
+    max_unzip_mb: int = 2048
+    max_zip_entries: int = 10_000
+    max_zip_depth: int = 2
+    max_compression_ratio: float = 200.0
     workspace_root: Path = Path(tempfile.gettempdir()) / "mosaic-jobs"
     job_ttl_minutes: int = 60
 
