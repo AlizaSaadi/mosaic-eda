@@ -38,6 +38,9 @@ class GuardContext:
     plan_run: PlanRun | None = None
     verified: int = 0
     passing: list[dict] = field(default_factory=list)  # findings that passed on the last attempt
+    # set by the Flow's data-type adapter; tables are the default
+    execute: Callable[[CleaningPlan], PlanRun] | None = None
+    post_checks: Callable[[PlanRun], list[str]] | None = None
     passing_verified: int = 0
 
 
@@ -105,17 +108,17 @@ def plan_guardrail(ctx: GuardContext) -> Guardrail:
             return _reject(ctx, "Cleaning plan isn't valid", [f"Invalid JSON: {str(exc)[:300]}"])
         if not plan.ops:
             return _reject(ctx, "Cleaning plan is empty", ["Propose at least one operation."])
-        run = execute_plan(plan, ctx.df, ctx.store)
+        run = ctx.execute(plan) if ctx.execute else execute_plan(plan, ctx.df, ctx.store)
         if not run.ok:
             return _reject(ctx, "Cleaning plan failed the dry run", run.errors)
-        shifts = distribution_shifts(ctx.df, run)
+        shifts = ctx.post_checks(run) if ctx.post_checks else distribution_shifts(ctx.df, run)
         if shifts:
             return _reject(ctx, "Cleaning plan distorts the data", shifts)
         ctx.plan_run = run
         ctx.reporter.emit(
             "step",
             "Cleaning plan passed the dry run",
-            f"{len(plan.ops)} operations; rows {len(ctx.df):,} -> {len(run.df):,}",
+            f"{len(plan.ops)} operations; {len(ctx.df):,} -> {len(run.df):,}",
             "done",
         )
         return True, output
@@ -172,16 +175,20 @@ def findings_guardrail(ctx: GuardContext) -> Guardrail:
                     verified += 1
             claimed_values = [m.value for m in f.claimed_metrics]
             for value in statement_numbers(f.statement):
-                if not any(close(value, c) or close(value, round(c, 2)) for c in claimed_values):
-                    hint = "Add it under its evidence key, or remove the number."
-                    where = ctx.store.find_value(value)
-                    if where:
-                        spots = " or ".join(f"'{k}' in {a}" for a, k in where)
-                        hint = f"It matches {spots}: add that key and cite that artifact."
-                    problems.append(
-                        f"{label}: the statement uses {value:g}, but claimed_metrics has no "
-                        f"matching entry. {hint}"
-                    )
+                if any(close(value, c) or close(value, round(c, 2)) for c in claimed_values):
+                    continue
+                if ctx.store.find_value(value, within=f.evidence, limit=1):
+                    verified += 1  # not declared, but it's in the evidence this finding cites
+                    continue
+                hint = "Add it under its evidence key, or remove the number."
+                where = ctx.store.find_value(value)
+                if where:
+                    spots = " or ".join(f"'{k}' in {a}" for a, k in where)
+                    hint = f"It matches {spots}: add that key and cite that artifact."
+                problems.append(
+                    f"{label}: the statement uses {value:g}, which isn't in the cited evidence. "
+                    f"{hint}"
+                )
             if len(problems) == before:
                 passing.append(f.model_dump())
             else:

@@ -7,6 +7,7 @@ parameters are validated and inserted with repr(), so plan contents can't inject
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -14,7 +15,8 @@ from enum import StrEnum
 from typing import Any, Literal
 
 import pandas as pd
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from mosaic.tables import pipeline_helpers
 
@@ -288,9 +290,33 @@ _op(
 class CleaningOp(BaseModel):
     op: str = Field(description="Operation name from the catalog")
     columns: list[str] = Field(default_factory=list, description="Target columns")
-    params: dict[str, Any] = Field(default_factory=dict)
+    # Gemini's structured output drops free-form dict fields, so agents send parameters as
+    # a JSON string; code turns it into `params`
+    params_json: str = Field(
+        default="{}", description='Parameters as a JSON object string, e.g. {"min_blur": 175.5}'
+    )
+    params: SkipJsonSchema[dict[str, Any]] = Field(default_factory=dict, exclude=True)
     rationale: str = Field(description="Why, in one sentence, citing the evidence")
     evidence: list[str] = Field(default_factory=list, description="Artifact IDs supporting it")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _params_from_json(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        if data.get("params"):  # code and tests may pass a dict directly
+            data["params_json"] = json.dumps(data["params"])
+            return data
+        text = (data.get("params_json") or "{}").strip() or "{}"
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"params_json isn't valid JSON: {text[:80]}") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("params_json must be a JSON object")
+        data["params"] = parsed
+        return data
 
 
 class CleaningPlan(BaseModel):
@@ -298,14 +324,23 @@ class CleaningPlan(BaseModel):
     ops: list[CleaningOp]
 
 
-def catalog_text() -> str:
+def _param_text(name: str, field: Any) -> str:
+    """'min_blur: number (required)' or 'max_distance: integer = 6', readable for agents."""
+    kind = getattr(field.annotation, "__name__", str(field.annotation))
+    kind = {"float": "number", "int": "integer", "str": "text", "bool": "true/false"}.get(
+        kind, kind
+    )
+    if kind == "list":
+        kind = "list of exact file paths from the evidence"
+    if field.is_required():
+        return f"{name}: {kind} (required)"
+    return f"{name}: {kind} = {field.default!r}"
+
+
+def catalog_text(catalog: dict[str, OpSpec] | None = None) -> str:
     lines = []
-    for spec in OPS.values():
-        fields = ", ".join(
-            f"{n}: {f.annotation.__name__ if hasattr(f.annotation, '__name__') else f.annotation}"
-            f"={f.default!r}"
-            for n, f in spec.params.model_fields.items()
-        )
+    for spec in (catalog or OPS).values():
+        fields = ", ".join(_param_text(n, f) for n, f in spec.params.model_fields.items())
         cols = (
             "columns required"
             if spec.needs_columns and not spec.all_columns_ok
@@ -319,11 +354,15 @@ def catalog_text() -> str:
     return "\n".join(lines)
 
 
-def op_code(op: CleaningOp, columns_now: list[str]) -> str:
+def op_code(
+    op: CleaningOp, columns_now: list[str], catalog: dict[str, OpSpec] | None = None
+) -> str:
     """Validate one operation and return its pandas code. Raises ValueError with a fix hint."""
-    spec = OPS.get(op.op)
+    catalog = catalog or OPS
+    spec = catalog.get(op.op)
     if spec is None:
-        raise ValueError(f"'{op.op}' is not an allowed operation. Choose from: {', '.join(OPS)}.")
+        allowed = ", ".join(catalog)
+        raise ValueError(f"'{op.op}' is not an allowed operation. Choose from: {allowed}.")
     try:
         params = spec.params(**op.params)
     except ValidationError as exc:
@@ -349,8 +388,8 @@ def helper_namespace() -> dict[str, Any]:
     return ns
 
 
-def run_code(code: str, df: pd.DataFrame) -> pd.DataFrame:
-    namespace = helper_namespace()
+def run_code(code: str, df: pd.DataFrame, namespace: dict[str, Any] | None = None) -> pd.DataFrame:
+    namespace = dict(namespace or helper_namespace())
     namespace["df"] = df
     exec(compile(code, "<cleaning-op>", "exec"), namespace)  # templates only; see module docstring
     return namespace["df"]

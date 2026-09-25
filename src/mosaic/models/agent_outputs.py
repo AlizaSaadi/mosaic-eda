@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class TriageBrief(BaseModel):
@@ -15,6 +15,14 @@ class TriageBrief(BaseModel):
     target_column: str | None = Field(
         default=None, description="Column the user wants to predict, if any (exact name)"
     )
+
+    @field_validator("target_column", mode="before")
+    @classmethod
+    def _null_words_are_null(cls, value: object) -> object:
+        # models sometimes write the word "null" instead of JSON null
+        if isinstance(value, str) and value.strip().lower() in {"", "null", "none", "n/a", "na"}:
+            return None
+        return value
 
 
 class Metric(BaseModel):

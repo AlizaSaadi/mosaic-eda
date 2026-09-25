@@ -55,19 +55,28 @@ def execute_plan(
     *,
     max_row_loss: float = MAX_ROW_LOSS,
     max_new_missing: float = MAX_NEW_MISSING,
+    catalog: dict | None = None,
+    namespace: dict | None = None,
+    unit: str = "rows",
 ) -> PlanRun:
-    """Run the plan on a copy, step by step, collecting every problem with a fix hint."""
+    """Run the plan on a copy, step by step, collecting every problem with a fix hint.
+
+    Tables use the default catalog; other data types pass their own catalog, helper
+    namespace, and unit (images work on a table of files, one row per image).
+    """
+    catalog = catalog or OPS
     work = df.copy()
     run = PlanRun(df=work)
     start_rows = len(df)
     for i, op in enumerate(plan.ops, 1):
-        label = f"Step {i} ({op.op} on {op.columns or 'all columns'})"
+        target = f" on {op.columns}" if op.columns else ("" if catalog is not OPS else " on all")
+        label = f"Step {i} ({op.op}{target})"
         try:
-            code = op_code(op, list(work.columns))
+            code = op_code(op, list(work.columns), catalog)
         except ValueError as exc:
             run.errors.append(f"{label}: {exc}")
             continue
-        spec = OPS[op.op]
+        spec = catalog[op.op]
         if spec.risk == Risk.DESTRUCTIVE and not op.evidence:
             run.errors.append(
                 f"{label}: removes data, so cite the evidence artifact that justifies it."
@@ -80,12 +89,12 @@ def execute_plan(
                 continue
         before = work
         try:
-            after = run_code(code, before.copy())
+            after = run_code(code, before.copy(), namespace)
         except Exception as exc:
             run.errors.append(f"{label} failed: {type(exc).__name__}: {str(exc)[:200]}")
             continue
         new_missing: dict[str, int] = {}
-        if op.op in CONVERSIONS:
+        if op.op in CONVERSIONS and catalog is OPS:
             for col in op.columns or []:
                 present = ~pipeline_helpers.is_missing(before[col])
                 lost = int((present & after[col].isna()).sum())
@@ -121,15 +130,16 @@ def execute_plan(
     loss = 1 - len(work) / max(start_rows, 1)
     if loss > max_row_loss:
         run.errors.append(
-            f"The plan removes {loss:.0%} of rows ({start_rows - len(work)} of {start_rows}), "
+            f"The plan removes {loss:.0%} of {unit} ({start_rows - len(work)} of {start_rows}), "
             f"over the {max_row_loss:.0%} limit. Use less destructive operations."
         )
     run.df = work
     return run
 
 
-def _helpers_source() -> str:
-    source = inspect.getsource(pipeline_helpers)
+def helpers_source(module=pipeline_helpers) -> str:
+    """A helper module's code without its docstring and top-level imports, for export."""
+    source = inspect.getsource(module)
     body = source.split('"""', 2)[-1]  # drop the module docstring
     return re.sub(r"^(import|from) .*\n", "", body, flags=re.M).strip()
 
@@ -171,7 +181,7 @@ import numpy as np
 import numpy as np
 import pandas as pd
 
-{_helpers_source()}
+{helpers_source()}
 
 
 def load(path):

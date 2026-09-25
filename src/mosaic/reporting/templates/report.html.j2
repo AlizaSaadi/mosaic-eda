@@ -40,6 +40,9 @@ code{font:13px 'JetBrains Mono',monospace}
 .timeline{list-style:none;padding:0;margin:0}.timeline li{border-left:2px solid var(--border);padding:4px 0 10px 14px}
 .timeline .t{font:12px 'JetBrains Mono',monospace;color:var(--muted);margin-right:6px}
 .timeline pre{white-space:pre-wrap;font:13px/1.5 'JetBrains Mono',monospace;color:var(--muted);margin:4px 0 0}
+.thumbs{display:flex;flex-wrap:wrap;gap:10px}.thumbs figure{margin:0;width:110px}.thumbs img{width:96px;height:96px;object-fit:contain;border:1px solid var(--border);border-radius:6px;background:var(--surface)}
+figcaption{font:11px 'JetBrains Mono',monospace;color:var(--muted);word-break:break-all}
+.sheet{margin:0 0 14px}.sheet img{max-width:100%;border:1px solid var(--border);border-radius:8px}
 ul{padding-left:20px} footer{margin-top:40px;color:var(--muted);font-size:13px}
 </style>
 </head>
@@ -51,7 +54,7 @@ ul{padding-left:20px} footer{margin-top:40px;color:var(--muted);font-size:13px}
   <div class="tiles">
     <div class="tile"><div class="k">Data quality before</div><div class="v">{{ quality_raw }}/100</div></div>
     <div class="tile"><div class="k">Data quality after cleaning</div><div class="v">{{ quality_clean }}/100</div></div>
-    <div class="tile"><div class="k">Rows</div><div class="v">{{ "{:,}".format(rows_before) }} → {{ "{:,}".format(rows_after) }}</div></div>
+    <div class="tile"><div class="k">{{ unit|capitalize }}</div><div class="v">{{ "{:,}".format(rows_before) }} → {{ "{:,}".format(rows_after) }}</div></div>
     <div class="tile"><div class="k">Numbers fact-checked</div><div class="v">{{ facts_verified }}</div></div>
   </div>
   {% if triage %}<p><b>What this dataset is:</b> {{ triage.dataset_description }}{% if target %} Target column: <code>{{ target }}</code>.{% endif %}</p>{% endif %}
@@ -82,7 +85,7 @@ ul{padding-left:20px} footer{margin-top:40px;color:var(--muted);font-size:13px}
 <h2>Cleaning applied</h2>
 <p>{{ plan_summary }}</p>
 <div class="tbl"><table>
-<tr><th>#</th><th>Operation</th><th>Risk</th><th>Columns</th><th>Rows</th><th>Why</th></tr>
+<tr><th>#</th><th>Operation</th><th>Risk</th><th>Columns</th><th>{{ unit|capitalize }}</th><th>Why</th></tr>
 {% for s in steps %}
 <tr><td>{{ s.index }}</td><td><code>{{ s.op }}</code></td><td>{{ s.risk }}</td><td>{{ s.columns|join(", ") or "all" }}</td>
 <td>{{ "{:,}".format(s.rows_before) }}{% if s.rows_after != s.rows_before %} → {{ "{:,}".format(s.rows_after) }}{% endif %}</td><td>{{ s.rationale }}</td></tr>
@@ -93,15 +96,40 @@ ul{padding-left:20px} footer{margin-top:40px;color:var(--muted);font-size:13px}
 <h2>Charts</h2>
 <div class="charts">{% for c in charts %}<div class="chart" id="chart{{ loop.index }}"></div>{% endfor %}</div>
 
+{% if extras.columns %}
 <h2>Column profile (raw data)</h2>
 <div class="tbl"><table>
 <tr><th>Column</th><th>Type</th><th>Missing %</th><th>Unique</th><th>Notes</th></tr>
-{% for name, c in columns.items() %}
+{% for name, c in extras.columns.items() %}
 <tr><td><code>{{ name }}</code></td><td>{{ c.kind }}</td><td>{{ c.missing_pct }}</td><td>{{ c.unique }}</td>
 <td>{% if c.mean is defined and c.mean is not none %}mean {{ c.mean }}, median {{ c.median }}{% if c.skew is not none %}, skew {{ c.skew }}{% endif %}{% endif %}
 {% if c.hidden_missing %} · {{ c.hidden_missing }} hidden-missing{% endif %}{% if c.detail %} · {{ c.detail }}{% endif %}</td></tr>
 {% endfor %}
 </table></div>
+{% endif %}
+
+{% if extras.balance %}
+<h2>Class balance</h2>
+<div class="tbl"><table>
+<tr><th>Class</th><th>Images</th><th>Share %</th></tr>
+{% for name, c in extras.balance.classes.items() %}<tr><td><code>{{ name }}</code></td><td>{{ c.count }}</td><td>{{ c.share }}</td></tr>{% endfor %}
+</table></div>
+<p class="ev">Largest class / smallest class: {{ extras.balance.imbalance_ratio }}</p>
+{% endif %}
+
+{% if extras.flagged %}
+<h2>Examples of problem images</h2>
+{% for group in extras.flagged %}
+<h3 style="font-size:15px;margin:16px 0 6px">{{ group.category|capitalize }}</h3>
+<div class="thumbs">{% for item in group["items"] %}<figure><img src="data:image/png;base64,{{ item.b64 }}" alt="{{ item.path }}"><figcaption>{{ item.path }}</figcaption></figure>{% endfor %}</div>
+{% endfor %}
+{% endif %}
+
+{% if extras.sheets %}
+<h2>Contact sheets reviewed by the vision model</h2>
+<p class="ev">Numbered thumbnails per class. The vision review's suspicions are AI observations, confirmed by code where possible.</p>
+{% for sheet in extras.sheets %}<figure class="sheet"><img src="data:image/png;base64,{{ sheet.b64 }}" alt="Contact sheet for {{ sheet.class }}"><figcaption>{{ sheet.class }}</figcaption></figure>{% endfor %}
+{% endif %}
 
 {% if notes %}<h2>Notes</h2><ul>{% for n in notes %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}
 

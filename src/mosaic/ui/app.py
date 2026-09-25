@@ -20,6 +20,7 @@ from mosaic.llm.routing import build_tracker
 from mosaic.workspace import create_workspace, sweep_stale
 
 EXAMPLE_CSV = PROJECT_ROOT / "examples" / "datasets" / "messy_sales.csv"
+EXAMPLE_IMAGES = PROJECT_ROOT / "examples" / "datasets" / "shapes_dataset.zip"
 MAX_PLOTS = 4
 POLL_SECONDS = 0.6
 
@@ -86,7 +87,8 @@ def results_markdown(state) -> str:
         n.get("executive_summary", ""),
         "",
         f"**Data quality:** {state.quality_raw}/100 before cleaning, "
-        f"{state.quality_clean}/100 after · **Rows:** {state.rows_before:,} → "
+        f"{state.quality_clean}/100 after · **{state.unit.capitalize()}:** "
+        f"{state.rows_before:,} → "
         f"{state.rows_after:,}",
     ]
     if state.target:
@@ -109,6 +111,7 @@ def run_analysis(upload, url: str, goal: str, user_key: str):
     settings = get_settings()
     source = upload if upload else (url or "").strip()
     empty_plots = [gr.update(value=None, visible=False)] * MAX_PLOTS
+    hidden_gallery = gr.update(value=None, visible=False)
     if not source:
         yield (
             [],
@@ -116,6 +119,7 @@ def run_analysis(upload, url: str, goal: str, user_key: str):
             gr.update(),
             None,
             *empty_plots,
+            hidden_gallery,
             runs_left_text(settings),
         )
         return
@@ -133,6 +137,7 @@ def run_analysis(upload, url: str, goal: str, user_key: str):
             gr.update(),
             None,
             *empty_plots,
+            hidden_gallery,
             runs_left_text(settings),
         )
         return
@@ -164,6 +169,7 @@ def run_analysis(upload, url: str, goal: str, user_key: str):
             gr.update(),
             None,
             *empty_plots,
+            hidden_gallery,
             runs_left_text(settings),
         )
         time.sleep(POLL_SECONDS)
@@ -176,12 +182,18 @@ def run_analysis(upload, url: str, goal: str, user_key: str):
     if "trace" not in state.outputs:  # failed runs still get their trace
         state.outputs["trace"] = str(runtime.reporter.write_trace(runtime.ws.out / "trace.json"))
     files = [
-        state.outputs[k] for k in ("report", "cleaned", "pipeline", "trace") if k in state.outputs
+        state.outputs[k]
+        for k in ("report", "cleaned", "manifest", "pipeline", "trace")
+        if k in state.outputs
     ]
+    adapter = flow._adapter
+    chart_ids = adapter.chart_ids if adapter else [a.id for a in runtime.store.all("chart")]
     plots = []
-    for artifact in runtime.store.all("chart")[:MAX_PLOTS]:
-        fig = pio.from_json(json.dumps(artifact.data["figure"]))
+    for chart_id in chart_ids[:MAX_PLOTS]:
+        fig = pio.from_json(json.dumps(runtime.store.get(chart_id).data["figure"]))
         plots.append(gr.update(value=fig, visible=True))
+    pictures = adapter.gallery() if adapter and state.status == "done" else []
+    gallery = gr.update(value=pictures or None, visible=bool(pictures))
     plots += [gr.update(value=None, visible=False)] * (MAX_PLOTS - len(plots))
     yield (
         feed,
@@ -189,6 +201,7 @@ def run_analysis(upload, url: str, goal: str, user_key: str):
         gr.update(value=results_markdown(state), visible=True),
         files or None,
         *plots,
+        gallery,
         runs_left_text(settings),
     )
 
@@ -199,18 +212,31 @@ def build_app() -> gr.Blocks:
         gr.Markdown(
             "# MOSAIC EDA\n"
             "**Multimodal Orchestrated System for Analysis, Inspection & Cleaning.** "
-            "Drop in a messy table. A crew of AI agents plans the cleaning, the code checks every "
-            "plan and every number, and you get a report, the cleaned data, and a pipeline "
-            "script you can rerun.\n\n"
-            "This version analyzes tables (CSV, Excel, JSON Lines). Images, audio, text, and "
-            "video are coming next. *Uses the Gemini free tier: don't upload sensitive data.*"
+            "Drop in a messy table or a zip of images. A crew of AI agents plans the cleaning, "
+            "the code checks every plan and every number, and you get a report, the cleaned "
+            "data, and a pipeline script you can rerun.\n\n"
+            "This version analyzes tables (CSV, Excel, JSON Lines) and image datasets (a zip "
+            "with one folder per class). Audio, text, and video are coming next. "
+            "*Uses the Gemini free tier: don't upload sensitive data.*"
         )
         with gr.Row():
             with gr.Column(scale=2):
                 with gr.Tab("Upload"):
                     upload = gr.File(
-                        label="CSV, Excel, JSON Lines, or a zip",
-                        file_types=[".csv", ".tsv", ".txt", ".xlsx", ".xls", ".jsonl", ".zip"],
+                        label="CSV, Excel, JSON Lines, an image, or a zip",
+                        file_types=[
+                            ".csv",
+                            ".tsv",
+                            ".txt",
+                            ".xlsx",
+                            ".xls",
+                            ".jsonl",
+                            ".zip",
+                            ".jpg",
+                            ".jpeg",
+                            ".png",
+                            ".webp",
+                        ],
                         type="filepath",
                     )
                 with gr.Tab("Link"):
@@ -230,6 +256,7 @@ def build_app() -> gr.Blocks:
                     )
                 run_btn = gr.Button("Analyze", variant="primary")
                 example_btn = gr.Button("Try the messy sales CSV example")
+                image_example_btn = gr.Button("Try the messy image dataset example")
                 runs_left = gr.Markdown(runs_left_text(settings))
             with gr.Column(scale=3):
                 feed = gr.Chatbot(label="Agent room", height=460)
@@ -237,6 +264,12 @@ def build_app() -> gr.Blocks:
         results = gr.Markdown(visible=False)
         with gr.Row():
             plots = [gr.Plot(visible=False) for _ in range(MAX_PLOTS)]
+        gallery = gr.Gallery(
+            label="Contact sheets reviewed by the vision model",
+            visible=False,
+            columns=2,
+            height="auto",
+        )
         downloads = gr.File(
             label="Downloads: report, cleaned data, pipeline script, trace", file_count="multiple"
         )
@@ -245,10 +278,13 @@ def build_app() -> gr.Blocks:
             "Illustrations planned from Highlights (CC0)</small>"
         )
 
-        outputs = [feed, counters, results, downloads, *plots, runs_left]
+        outputs = [feed, counters, results, downloads, *plots, gallery, runs_left]
         run_btn.click(run_analysis, [upload, url, goal, user_key], outputs)
         example_btn.click(
             lambda: (str(EXAMPLE_CSV), "Predict which customers churned"), None, [upload, goal]
+        ).then(run_analysis, [upload, url, goal, user_key], outputs)
+        image_example_btn.click(
+            lambda: (str(EXAMPLE_IMAGES), "Train an image classifier"), None, [upload, goal]
         ).then(run_analysis, [upload, url, goal, user_key], outputs)
     return demo
 
@@ -257,6 +293,6 @@ def launch() -> None:
     settings = get_settings()
     Path(settings.workspace_root).mkdir(parents=True, exist_ok=True)
     build_app().queue(default_concurrency_limit=settings.max_concurrent_jobs).launch(
-        allowed_paths=[str(settings.workspace_root), str(EXAMPLE_CSV.parent)],
+        allowed_paths=[str(settings.workspace_root), str(EXAMPLE_CSV.parent)],  # examples
         max_file_size=f"{settings.max_input_mb}mb",
     )

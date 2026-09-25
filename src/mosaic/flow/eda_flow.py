@@ -1,6 +1,6 @@
 """The MOSAIC Flow: code routes the job, agents reason inside their own steps.
 
-Tables, end to end:
+Tables and images, end to end (a data-type adapter supplies what differs):
 ingest -> route -> profile (code) -> triage (agent) -> plan cleaning (agent; dry-run and
 distribution guardrails; safe-only fallback) -> apply cleaning + re-profile (code) ->
 findings (agent; fact-check guardrail) -> review (agent) -> [revise -> review] at most
@@ -11,17 +11,16 @@ from __future__ import annotations
 
 import json
 import time
-from pathlib import Path
 from typing import Any
 
 from crewai.flow.flow import Flow, listen, or_, router, start
 from crewai.flow.runtime import FlowState
 from pydantic import Field, PrivateAttr
 
-from mosaic.crews.table.crew import TableCrew
+from mosaic.flow.adapters import Adapter, make_adapter
 from mosaic.flow.runtime import JobRuntime
 from mosaic.guardrails.task_guardrails import GuardContext, parse_output
-from mosaic.ingest.models import IngestError, Modality
+from mosaic.ingest.models import IngestError
 from mosaic.ingest.service import ingest
 from mosaic.llm.quota import QuotaExhausted
 from mosaic.models.agent_outputs import (
@@ -31,15 +30,7 @@ from mosaic.models.agent_outputs import (
     TriageBrief,
 )
 from mosaic.reporting.html import render_report
-from mosaic.tables.cleaning import (
-    conservative_plan,
-    execute_plan,
-    export_clean,
-    pipeline_script,
-)
-from mosaic.tables.load import LoadedTable, load_table
-from mosaic.tables.ops import CleaningPlan, catalog_text
-from mosaic.tables.profile import ProfileResult, profile_table
+from mosaic.tables.ops import CleaningPlan
 
 
 class EDAState(FlowState):
@@ -57,7 +48,9 @@ class EDAState(FlowState):
     narrative: dict[str, Any] | None = None
     quality_raw: float | None = None
     quality_clean: float | None = None
-    rows_before: int = 0
+    modality: str = ""
+    unit: str = "rows"
+    rows_before: int = 0  # items before cleaning: rows for tables, images for images
     rows_after: int = 0
     outputs: dict[str, str] = Field(default_factory=dict)
     timings: dict[str, float] = Field(default_factory=dict)
@@ -73,20 +66,15 @@ CHECK_KINDS = ("guardrail", "fix", "fallback", "review")
 
 class EDAFlow(Flow[EDAState]):
     _rt: JobRuntime | None = PrivateAttr(default=None)
-    _table: LoadedTable | None = PrivateAttr(default=None)
-    _raw: ProfileResult | None = PrivateAttr(default=None)
-    _clean: ProfileResult | None = PrivateAttr(default=None)
+    _adapter: Adapter | None = PrivateAttr(default=None)
     _guard: GuardContext | None = PrivateAttr(default=None)
-    _crew: TableCrew | None = PrivateAttr(default=None)
+    _crew: Any = PrivateAttr(default=None)
 
     @classmethod
     def for_job(cls, runtime: JobRuntime) -> EDAFlow:
         flow = cls()
         flow._rt = runtime
         flow._guard = GuardContext(store=runtime.store, reporter=runtime.reporter)
-        flow._crew = TableCrew(
-            runtime.llm_for, flow._guard, retries=2, n_findings=lambda: len(flow.state.findings)
-        )
         return flow
 
     # ---- helpers ----
@@ -136,51 +124,52 @@ class EDAFlow(Flow[EDAState]):
             return
         self.state.source_name = manifest.source_name
         self.state.dominant = manifest.dominant.value if manifest.dominant else ""
-        tables = sorted(manifest.files_of(Modality.TABLE), key=lambda f: -f.size)
-        if manifest.is_mixed:
-            self.state.notes.append(
-                "The input has several data types. This version analyzes the table only."
-            )
-        if not tables:
-            found = ", ".join(f"{n} {m}" for m, n in manifest.counts.items())
+        adapter = make_adapter(manifest, self._rt)
+        if adapter is None:
+            found = ", ".join(f"{n} {m.value}" for m, n in manifest.counts.items())
             self._fail(
-                f"Found {found}. This version analyzes tables (CSV, Excel, JSON Lines) "
-                "first; images, audio, text, and video are coming next.",
+                f"Found {found}. This version analyzes tables and images; audio, text, and "
+                "video are coming next.",
                 "unsupported",
             )
             return
-        if len(tables) > 1:
-            self.state.notes.append(
-                f"Found {len(tables)} tables; analyzing the largest, '{tables[0].path}'."
+        if manifest.is_mixed:
+            others = ", ".join(
+                f"{n} {m.value}" for m, n in manifest.counts.items() if m != manifest.dominant
             )
-        path = Path(manifest.root) / tables[0].path
-        self._table = load_table(path, tables[0].format)
-        self._step(
-            "Data loaded",
-            f"{tables[0].path}: {len(self._table.df):,} rows x {self._table.df.shape[1]} columns",
-            "done",
+            self.state.notes.append(
+                f"The input also contains {others}. This version analyzes the main data type "
+                f"({manifest.dominant.value}) only."
+            )
+        self._adapter = adapter
+        self.state.modality, self.state.unit = adapter.modality, adapter.unit
+        self._crew = adapter.crew_cls(
+            self._rt.llm_for, self._guard, retries=2, n_findings=lambda: len(self.state.findings)
         )
+        described = adapter.load(manifest)
+        self._step("Data loaded", described, "done")
         self._timed("ingest", t0)
 
     @router(ingest_input)
     def route(self) -> str:
-        return "table" if self._ok() else "stop"
+        return "analyze_data" if self._ok() else "stop"
 
-    @listen("table")
+    @listen("analyze_data")
     def profile_raw(self) -> None:
         t0 = time.time()
-        self._step("Profiling the raw data (code only, no AI)")
-        self._raw = profile_table(self._table, self._rt.store, goal=self.state.goal, stage="raw")
-        self.state.quality_raw = self._raw.quality
-        self.state.target = self._raw.target
-        self.state.rows_before = len(self._table.df)
-        self._guard.df = self._table.df
-        self._guard.columns = list(self._table.df.columns)
-        self._rt.reporter.count("tool_runs", len(self._raw.artifact_ids) + len(self._raw.chart_ids))
+        adapter = self._adapter
+        self._step("Profiling the raw data (code only; images get one vision request)")
+        quality, target, items = adapter.profile_raw(self.state.goal)
+        self.state.quality_raw, self.state.target, self.state.rows_before = quality, target, items
+        self._guard.df = adapter.guard_df
+        self._guard.columns = adapter.columns
+        self._guard.execute = adapter.execute
+        self._guard.post_checks = adapter.post_checks
+        artifacts = self._rt.store.all("profile")
+        self._rt.reporter.count("tool_runs", len(artifacts) + len(adapter.chart_ids))
         self._step(
             "Profile ready",
-            f"{len(self._raw.artifact_ids)} evidence artifacts, "
-            f"quality score {self._raw.quality}/100",
+            f"{len(artifacts)} evidence artifacts, quality score {quality}/100",
             "done",
         )
         self._timed("profile_raw", t0)
@@ -195,8 +184,21 @@ class EDAFlow(Flow[EDAState]):
                 "goal": self.state.goal or "(none given)",
                 "profile_brief": self._rt.store.brief(("profile",)),
             },
+            fatal=False,
         )
         if result is None:
+            if not self._ok():
+                return
+            # Continue without the agent's brief: the code profile still guides the others
+            fallback = TriageBrief(
+                dataset_description=f"A {self.state.modality} dataset (automatic triage "
+                "was unavailable).",
+                focus_areas=["data quality problems in the profile"],
+                target_column=self.state.target,
+            )
+            self.state.triage = fallback.model_dump()
+            self.state.notes.append("Triage was unavailable, so a basic brief was used.")
+            self._step("Using a basic triage brief", "", "warning")
             return
         brief = parse_output(result.tasks_output[0], TriageBrief)
         self.state.triage = brief.model_dump()
@@ -217,7 +219,7 @@ class EDAFlow(Flow[EDAState]):
                 "focus_areas": "; ".join(self.state.triage.get("focus_areas", [])),
                 "target": self.state.target or "none",
                 "profile_brief": self._rt.store.brief(("profile",)),
-                "catalog": catalog_text(),
+                "catalog": self._adapter.catalog(),
             },
             fatal=False,
         )
@@ -230,8 +232,8 @@ class EDAFlow(Flow[EDAState]):
 
     def _use_conservative_plan(self) -> None:
         """Self-correction level 3 fallback: only format and type fixes, nothing lossy."""
-        plan = conservative_plan(self._raw.types)
-        run = execute_plan(plan, self._table.df, self._rt.store)
+        plan = self._adapter.conservative_plan()
+        run = self._adapter.execute(plan)
         if not run.ok:
             self._fail("Neither the proposed plans nor the safe fallback passed the checks.")
             return
@@ -239,7 +241,7 @@ class EDAFlow(Flow[EDAState]):
         self.state.plan = plan.model_dump()
         self.state.notes.append(
             "The strategist's plans kept failing the checks, so a safe-only plan was used "
-            "(missing-value tokens and types fixed; nothing removed or imputed)."
+            "(only format fixes; nothing beyond unreadable data was removed)."
         )
         self._step("Using the safe-only fallback plan", f"{len(plan.ops)} operations", "warning")
 
@@ -251,25 +253,14 @@ class EDAFlow(Flow[EDAState]):
         run = self._guard.plan_run
         plan = CleaningPlan.model_validate(self.state.plan)
         self._step("Applying the cleaning plan", f"{len(run.steps)} operations")
-        clean_table = LoadedTable(
-            df=run.df.astype("str"), source=self._table.source, format=self._table.format
-        )
-        self._clean = profile_table(clean_table, self._rt.store, stage="clean")
-        self.state.quality_clean = self._clean.quality
-        self.state.rows_after = len(run.df)
-        out = self._rt.ws.out
-        export_clean(run.df, out / "cleaned.csv")
-        (out / "cleaning_pipeline.py").write_text(
-            pipeline_script(plan, run, self._table), encoding="utf-8"
-        )
-        self.state.outputs.update(
-            cleaned=str(out / "cleaned.csv"), pipeline=str(out / "cleaning_pipeline.py")
-        )
-        self._rt.reporter.count("tool_runs", len(self._clean.artifact_ids))
+        outputs, quality, items = self._adapter.apply(plan, run)
+        self.state.quality_clean, self.state.rows_after = quality, items
+        self.state.outputs.update(outputs)
+        self._rt.reporter.count("tool_runs", 2)
         self._step(
             "Cleaned and re-profiled",
-            f"quality {self.state.quality_raw} -> {self.state.quality_clean}; rows "
-            f"{self.state.rows_before:,} -> {self.state.rows_after:,}",
+            f"quality {self.state.quality_raw} -> {self.state.quality_clean}; "
+            f"{self.state.unit} {self.state.rows_before:,} -> {self.state.rows_after:,}",
             "done",
         )
         self._timed("apply_cleaning", t0)
@@ -277,7 +268,8 @@ class EDAFlow(Flow[EDAState]):
     def _cleaning_log(self) -> str:
         run = self._guard.plan_run
         return "\n".join(
-            f"{s.index}. {s.op} on {s.columns or 'all'} [{s.risk}]: rows {s.rows_before}->"
+            f"{s.index}. {s.op} on {s.columns or 'all'} [{s.risk}]: {self.state.unit} "
+            f"{s.rows_before}->"
             f"{s.rows_after}. {s.rationale}"
             for s in run.steps
         )
@@ -354,7 +346,8 @@ class EDAFlow(Flow[EDAState]):
             {
                 **self._common_inputs(),
                 "findings": self._numbered_findings(),
-                "sample_note": "The full table was analyzed (no sampling).",
+                "sample_note": "; ".join(n for n in self.state.notes if "sample" in n)
+                or "The full dataset was analyzed (no sampling).",
             },
             fatal=False,
         )
@@ -512,10 +505,7 @@ class EDAFlow(Flow[EDAState]):
         run = self._guard.plan_run
         plan = CleaningPlan.model_validate(self.state.plan)
         out = self._rt.ws.out
-        charts = [
-            self._rt.store.get(cid).data["figure"]
-            for cid in (self._raw.chart_ids + self._clean.chart_ids)[:8]
-        ]
+        charts = [self._rt.store.get(cid).data["figure"] for cid in self._adapter.chart_ids[:8]]
         render_report(
             out / "report.html",
             source_name=self.state.source_name,
@@ -531,8 +521,10 @@ class EDAFlow(Flow[EDAState]):
             plan_summary=plan.summary,
             steps=run.steps,
             charts=charts,
-            columns=self._rt.store.get(self._raw.artifact_ids[1]).data["columns"],
-            notes=self.state.notes + self._table.notes,
+            unit=self.state.unit,
+            modality=self.state.modality,
+            extras=self._adapter.report_extras(),
+            notes=self.state.notes + self._adapter.notes,
             models=sorted(self._rt.models_used),
             checks=self._check_timeline(),
             counters=dict(self._rt.reporter.counters),

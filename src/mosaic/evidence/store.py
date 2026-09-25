@@ -123,12 +123,17 @@ class EvidenceStore:
         return [v for a in artifact_ids if (v := self.lookup([a], key)) is not None]
 
     def find_value(
-        self, value: float, rel_tol: float = 0.01, abs_tol: float = 0.06, limit: int = 3
+        self,
+        value: float,
+        rel_tol: float = 0.01,
+        abs_tol: float = 0.06,
+        limit: int = 3,
+        within: list[str] | None = None,
     ) -> list[tuple[str, str]]:
-        """(artifact ID, key) pairs whose value matches, to point agents to the right evidence."""
+        """(artifact ID, key) pairs whose value matches, optionally only in `within` artifacts."""
         hits = []
         for artifact in self._items.values():
-            if artifact.kind == "chart":
+            if artifact.kind == "chart" or (within is not None and artifact.id not in within):
                 continue
             for key, v in flatten(artifact.data).items():
                 if isinstance(v, bool) or not isinstance(v, (int, float)):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from mosaic.config import Settings
 from mosaic.events.reporter import RunReporter
@@ -23,6 +24,7 @@ class JobRuntime:
     store: EvidenceStore | None = None
     routes: dict[str, list[PoolRule]] = field(default_factory=dict)
     models_used: set[str] = field(default_factory=set)
+    client_factory: Any = None  # tests inject a fake Gemini client for vision/audio calls
 
     def __post_init__(self) -> None:
         self.store = self.store or EvidenceStore(self.ws.artifacts)

@@ -74,13 +74,31 @@ def test_wrong_number_is_rejected_with_the_real_value(ctx):
     assert not ok and "evidence says 19.2144" in message
 
 
-def test_unclaimed_number_in_statement_is_rejected(ctx):
-    bad = [
+def test_unclaimed_number_must_be_in_the_cited_evidence(ctx):
+    # 4938.71 is revenue.mean in the cited artifact: verified even though not declared
+    fine = [
         finding("Mean revenue is 4938.71 and skew is 19.21.", {"revenue.skew": 19.21}),
         *GOOD[1:],
     ]
+    ok, _ = findings_guardrail(ctx)(out({"findings": fine}))
+    assert ok and ctx.verified == 4
+    # 5100.5 appears nowhere in the evidence: rejected
+    bad = [finding("Mean revenue is 5100.5 and skew is 19.21.", {"revenue.skew": 19.21}), *GOOD[1:]]
     ok, message = findings_guardrail(ctx)(out({"findings": bad}))
-    assert not ok and "uses 4938.71" in message
+    assert not ok and "uses 5100.5, which isn't in the cited evidence" in message
+
+
+def test_params_travel_as_a_json_string():
+    from mosaic.tables.ops import CleaningOp
+
+    op = CleaningOp.model_validate(
+        {"op": "drop_blurry", "params_json": '{"min_blur": 12.5}', "rationale": "r"}
+    )
+    assert op.params == {"min_blur": 12.5}
+    assert CleaningOp(op="x", params={"a": 1}, rationale="r").params_json == '{"a": 1}'
+    assert "params" not in CleaningOp.model_json_schema()["properties"]
+    with pytest.raises(ValueError):
+        CleaningOp.model_validate({"op": "x", "params_json": "{oops", "rationale": "r"})
 
 
 def test_too_few_findings_and_unknown_evidence(ctx):
@@ -192,3 +210,11 @@ def test_rounded_numbers_pass_the_fact_check(ctx):
     ]
     ok, _ = findings_guardrail(ctx)(out({"findings": rounded}))
     assert ok
+
+
+def test_triage_turns_null_words_into_null(ctx):
+    for word in ("null", "None", " n/a ", ""):
+        ok, _ = triage_guardrail(ctx)(
+            out({"dataset_description": "d", "focus_areas": [], "target_column": word})
+        )
+        assert ok

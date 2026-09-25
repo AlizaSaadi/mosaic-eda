@@ -47,12 +47,15 @@ class ScriptedLLM(BaseLLM):
                 "next_steps": ["Drop the leaky column before modeling."],
             }
         else:
-            answer = {
-                "dataset_description": "Sales orders with a churn flag.",
-                "focus_areas": ["types", "missing values", "leakage"],
-                "target_column": "churned",
-            }
+            answer = self._triage()
         return json.dumps(answer)
+
+    def _triage(self) -> dict:
+        return {
+            "dataset_description": "Sales orders with a churn flag.",
+            "focus_areas": ["types", "missing values", "leakage"],
+            "target_column": "churned",
+        }
 
     def _review(self) -> dict:
         n = self._state.get("reviews", 0) + 1
@@ -152,3 +155,125 @@ class ScriptedLLM(BaseLLM):
                 },
             ]
         }
+
+
+# ---- image datasets ----
+
+
+def _num(pattern: str, text: str) -> float:
+    return float(re.search(pattern, text).group(1))
+
+
+class ImageScriptedLLM(ScriptedLLM):
+    """Answers the image prompts; review and revision reuse the table behavior."""
+
+    def _triage(self) -> dict:
+        return {
+            "dataset_description": "Three-class shapes dataset.",
+            "focus_areas": ["class balance", "duplicates", "mislabels"],
+            "target_column": None,
+        }
+
+    def _plan(self, text: str) -> dict:
+        blur = _num(r"Blur threshold ([\d.]+)", text)
+        return {
+            "summary": "Remove unusable and duplicate images; flag suspected mislabels.",
+            "ops": [
+                {
+                    "op": "remove_corrupt",
+                    "rationale": "Unreadable files.",
+                    "evidence": ["img_overview_001"],
+                },
+                {
+                    "op": "drop_exact_duplicates",
+                    "rationale": "Byte-identical copies.",
+                    "evidence": ["img_dupes_001"],
+                },
+                {
+                    "op": "drop_cross_class_duplicates",
+                    "rationale": "Ambiguous labels.",
+                    "evidence": ["img_dupes_001"],
+                },
+                {
+                    "op": "drop_near_duplicates",
+                    "rationale": "Resized copies.",
+                    "evidence": ["img_dupes_001"],
+                },
+                {
+                    "op": "drop_blurry",
+                    "params": {"min_blur": blur},
+                    "rationale": "Blurry.",
+                    "evidence": ["img_quality_001"],
+                },
+                {
+                    "op": "flag_suspected_mislabels",
+                    "params": {"files": ["circles/circle_extra_0.jpg"]},
+                    "rationale": "Vision review suspicion.",
+                    "evidence": ["img_vision_001"],
+                },
+                {"op": "fix_exif_orientation", "rationale": "Upright images."},
+                {"op": "convert_to_rgb", "rationale": "Consistent mode."},
+            ],
+        }
+
+    def _findings(self, text: str) -> dict:
+        ratio = _num(r"largest/smallest ratio ([\d.]+)", text)
+        share = _num(r"triangles \d+ \(([\d.]+)%\)", text)
+        copies = _num(r"with (\d+) extra copies \(exact_extra_copies\)", text)
+        first = not self._state.get("findings_attempted")
+        self._state["findings_attempted"] = True
+        claimed = round(ratio + 3, 2) if first else round(ratio, 2)  # wrong on the first try
+        return {
+            "findings": [
+                {
+                    "title": "Revenue is heavily right-skewed",
+                    "severity": "warning",
+                    "statement": f"The largest class is {claimed} times the smallest.",
+                    "evidence": ["img_balance_001"],
+                    "claimed_metrics": [{"key": "imbalance_ratio", "value": claimed}],
+                },
+                {
+                    "title": "Triangles are under-represented",
+                    "severity": "warning",
+                    "statement": f"Triangles are {round(share, 2)}% of images.",
+                    "evidence": ["img_balance_001"],
+                    "claimed_metrics": [
+                        {"key": "classes.triangles.share", "value": round(share, 2)}
+                    ],
+                },
+                {
+                    "title": "Duplicate copies",
+                    "severity": "warning",
+                    "statement": f"There are {int(copies)} exact extra copies.",
+                    "evidence": ["img_dupes_001"],
+                    "claimed_metrics": [{"key": "exact_extra_copies", "value": copies}],
+                },
+            ]
+        }
+
+
+class FakeVisionModels:
+    def generate_content(self, model, contents, config):
+        from types import SimpleNamespace
+
+        from mosaic.images.vision import SheetReview, VisionReport
+
+        sheets = re.findall(r"Sheet (\d+): class '([^']+)'", contents[0])
+        reviews = []
+        for number, label in sheets:
+            outliers = [23, 24, 25] if (label == "circles" and number == "2") else []
+            reviews.append(
+                SheetReview(
+                    sheet=int(number),
+                    description=f"{label} shapes",
+                    outliers=outliers,
+                    reasons=["a square"] * len(outliers),
+                )
+            )
+        report = VisionReport(sheets=reviews, overall="Three shape classes.")
+        return SimpleNamespace(parsed=report, text=report.model_dump_json())
+
+
+class FakeVisionClient:
+    def __init__(self, api_key=None):
+        self.models = FakeVisionModels()
