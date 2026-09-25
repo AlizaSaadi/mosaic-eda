@@ -1,0 +1,38 @@
+name: Deploy to Hugging Face Space
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Set these in the GitHub repo: Settings > Secrets and variables > Actions
+    #   secret   HF_TOKEN  (write access to the Space)
+    #   variable HF_SPACE  (for example: your-username/mosaic-eda)
+    if: ${{ vars.HF_SPACE != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "huggingface_hub>=0.30"
+      - name: Upload app files to the Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ vars.HF_SPACE }}
+        run: |
+          python - <<'PY'
+          import os
+          from huggingface_hub import HfApi
+          HfApi(token=os.environ["HF_TOKEN"]).upload_folder(
+              repo_id=os.environ["HF_SPACE"],
+              repo_type="space",
+              folder_path=".",
+              commit_message=f"Deploy {os.environ['GITHUB_SHA'][:7]}",
+              ignore_patterns=[".git/*", ".github/*", "docs/*", "tests/*", "eval/*",
+                               ".env", ".env.*", "**/.DS_Store", "**/__pycache__/*"],
+              delete_patterns=["src/**", "assets/**"],
+          )
+          PY

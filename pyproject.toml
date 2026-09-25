@@ -1,0 +1,28 @@
+[project]
+name = "mosaic-eda"
+version = "0.1.0"
+description = "MOSAIC EDA: Multimodal Orchestrated System for Analysis, Inspection & Cleaning"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "MIT" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = [
+    "live: calls the real Gemini API and uses free-tier quota (run with -m live)",
+]
+addopts = "-m 'not live'"
+filterwarnings = ["ignore::DeprecationWarning:crewai.*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]
