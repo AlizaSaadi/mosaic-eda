@@ -15,9 +15,6 @@ from mosaic.ingest.models import Detection, Modality
 
 HEAD_BYTES = 64 * 1024
 
-IMAGE_FORMATS = {"jpg", "png", "gif", "webp", "heic", "bmp", "tif"}
-AUDIO_FORMATS = {"mp3", "wav", "m4a", "ogg", "flac", "aac"}
-VIDEO_FORMATS = {"mp4", "mov", "webm", "mkv", "avi", "m4v"}
 DOC_NAMES = re.compile(r"^(readme|license|licence|changelog|citation)(\.\w+)?$", re.I)
 DOC_EXTENSIONS = {".md", ".rst"}
 LOG_LINE = re.compile(

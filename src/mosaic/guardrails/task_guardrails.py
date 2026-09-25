@@ -5,7 +5,6 @@ The message on failure goes back to the agent, which then retries with that feed
 
 from __future__ import annotations
 
-import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -243,7 +242,3 @@ def review_guardrail(ctx: GuardContext, n_findings: Callable[[], int]) -> Guardr
         return True, output
 
     return check
-
-
-def dump_json(model: BaseModel) -> str:
-    return json.dumps(model.model_dump(), indent=1, default=str)
