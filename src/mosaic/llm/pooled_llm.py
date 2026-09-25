@@ -14,9 +14,11 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+import httpx
 from crewai.llms.base_llm import BaseLLM
 from crewai.llms.providers.gemini.completion import GeminiCompletion
 from google.genai import errors as genai_errors
+from google.genai import types as genai_types
 from pydantic import PrivateAttr
 
 from mosaic.llm.quota import PoolRule, QuotaTracker
@@ -24,6 +26,7 @@ from mosaic.llm.quota import PoolRule, QuotaTracker
 log = logging.getLogger(__name__)
 
 MAX_ATTEMPTS = 6
+CALL_TIMEOUT_S = 45  # a slow model is treated like a busy one: fall back to the next
 
 DelegateFactory = Callable[[str, "PooledLLM"], BaseLLM]
 CallEvent = Callable[[dict[str, Any]], None]
@@ -40,6 +43,7 @@ def default_delegate(model: str, owner: PooledLLM) -> BaseLLM:
         api_key=owner.api_key,
         temperature=owner.temperature,
         stop=list(owner.stop),
+        client_params={"http_options": genai_types.HttpOptions(timeout=CALL_TIMEOUT_S * 1000)},
     )
 
 
@@ -111,6 +115,11 @@ class PooledLLM(BaseLLM):
         self._emit(model, ok=False, fallback=True, reason=reason)
         return True
 
+    def _handle_timeout(self, model: str) -> None:
+        self._tracker.mark_rate_limited(model, daily=False, retry_after=120)
+        log.warning("Gemini %s timed out after %ss, trying the next model", model, CALL_TIMEOUT_S)
+        self._emit(model, ok=False, fallback=True, reason=f"{CALL_TIMEOUT_S}s timeout")
+
     # ---- CrewAI interface ----
 
     def call(self, messages: Any, *args: Any, **kwargs: Any) -> Any:
@@ -122,6 +131,10 @@ class PooledLLM(BaseLLM):
             except genai_errors.APIError as exc:
                 if not self._handle_error(model, exc):
                     raise
+                last_error = exc
+                continue
+            except httpx.TimeoutException as exc:
+                self._handle_timeout(model)
                 last_error = exc
                 continue
             self.last_model = model
@@ -138,6 +151,10 @@ class PooledLLM(BaseLLM):
             except genai_errors.APIError as exc:
                 if not self._handle_error(model, exc):
                     raise
+                last_error = exc
+                continue
+            except httpx.TimeoutException as exc:
+                self._handle_timeout(model)
                 last_error = exc
                 continue
             self.last_model = model

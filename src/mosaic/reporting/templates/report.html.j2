@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MOSAIC EDA report: {{ source_name }}</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500&family=Inter:wght@400;600&family=JetBrains+Mono&display=swap">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+:root{--bg:{{ p.bg }};--surface:{{ p.surface }};--border:{{ p.border }};--text:{{ p.text }};--muted:{{ p.muted }};
+--accent:{{ p.accent }};--hl:{{ p.highlight }};--crit:{{ p.critical }};--warn:{{ p.warning }};--info:{{ p.info }};--ok:{{ p.ok }}}
+@media (prefers-color-scheme:dark){:root{--bg:#1C1512;--surface:#261D18;--border:#4A3A2E;--text:#F3E9DC;--muted:#BFAE9C;
+--accent:#E0763A;--hl:#8C5A14;--crit:#E8776C;--warn:#E6B14A;--info:#8DB3C4;--ok:#A3C170}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15.5px/1.6 Inter,system-ui,sans-serif;padding:0 16px 64px}
+main{max-width:980px;margin:0 auto}
+header{padding:36px 0 20px;border-bottom:1px solid var(--border)}
+.eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{font:500 clamp(28px,4vw,40px)/1.15 Fraunces,Georgia,serif;margin:8px 0 10px}
+h2{font:500 24px/1.25 Fraunces,Georgia,serif;margin:36px 0 12px}
+.lede{font-size:17px;color:var(--muted);max-width:70ch}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:18px 0}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.tile .k{font-size:12px;color:var(--muted)} .tile .v{font:600 24px/1.3 Inter,sans-serif;font-variant-numeric:tabular-nums}
+.finding{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:10px 0}
+.finding h3{margin:0 0 4px;font-size:16px}
+.chip{display:inline-block;font-size:12px;font-weight:600;padding:1px 9px;border-radius:999px;border:1px solid currentColor;margin-right:8px}
+.critical{color:var(--crit)} .warning{color:var(--warn)} .info{color:var(--info)}
+.chip.critical{background:var(--crit);color:var(--bg);border-color:var(--crit)}
+.ev{font:12.5px 'JetBrains Mono',monospace;color:var(--muted)}
+.rec{margin-top:6px;font-size:14.5px}
+.tbl{overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--border);vertical-align:top}
+th{font-size:12.5px;color:var(--muted)} tr:last-child td{border-bottom:0}
+code{font:13px 'JetBrains Mono',monospace}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:12px}
+.chart{background:var(--surface);border:1px solid var(--border);border-radius:10px;min-height:340px}
+@media (max-width:520px){.charts{grid-template-columns:1fr}}
+ul{padding-left:20px} footer{margin-top:40px;color:var(--muted);font-size:13px}
+</style>
+</head>
+<body><main>
+<header>
+  <div class="eyebrow">MOSAIC EDA report · {{ generated }}</div>
+  <h1>{{ narrative.headline if narrative else source_name }}</h1>
+  <p class="lede">{{ narrative.executive_summary if narrative else "" }}</p>
+  <div class="tiles">
+    <div class="tile"><div class="k">Data quality before</div><div class="v">{{ quality_raw }}/100</div></div>
+    <div class="tile"><div class="k">Data quality after cleaning</div><div class="v">{{ quality_clean }}/100</div></div>
+    <div class="tile"><div class="k">Rows</div><div class="v">{{ "{:,}".format(rows_before) }} → {{ "{:,}".format(rows_after) }}</div></div>
+    <div class="tile"><div class="k">Numbers fact-checked</div><div class="v">{{ facts_verified }}</div></div>
+  </div>
+  {% if triage %}<p><b>What this dataset is:</b> {{ triage.dataset_description }}{% if target %} Target column: <code>{{ target }}</code>.{% endif %}</p>{% endif %}
+</header>
+
+<h2>Findings</h2>
+{% for f in findings %}
+<div class="finding">
+  <h3><span class="chip {{ f.severity }}">{{ f.severity|capitalize }}</span>{{ f.title }}</h3>
+  <div>{{ f.statement }}</div>
+  {% if f.recommendation %}<div class="rec"><b>Recommendation:</b> {{ f.recommendation }}</div>{% endif %}
+  <div class="ev">Evidence: {{ f.evidence|join(", ") }}</div>
+</div>
+{% else %}<p>No findings were produced.</p>{% endfor %}
+
+{% if narrative and narrative.next_steps %}
+<h2>Next steps</h2>
+<ul>{% for s in narrative.next_steps %}<li>{{ s }}</li>{% endfor %}</ul>
+{% endif %}
+
+<h2>Cleaning applied</h2>
+<p>{{ plan_summary }}</p>
+<div class="tbl"><table>
+<tr><th>#</th><th>Operation</th><th>Risk</th><th>Columns</th><th>Rows</th><th>Why</th></tr>
+{% for s in steps %}
+<tr><td>{{ s.index }}</td><td><code>{{ s.op }}</code></td><td>{{ s.risk }}</td><td>{{ s.columns|join(", ") or "all" }}</td>
+<td>{{ "{:,}".format(s.rows_before) }}{% if s.rows_after != s.rows_before %} → {{ "{:,}".format(s.rows_after) }}{% endif %}</td><td>{{ s.rationale }}</td></tr>
+{% endfor %}
+</table></div>
+<p class="ev">The same steps are in <code>cleaning_pipeline.py</code>, which you can rerun on the full dataset.</p>
+
+<h2>Charts</h2>
+<div class="charts">{% for c in charts %}<div class="chart" id="chart{{ loop.index }}"></div>{% endfor %}</div>
+
+<h2>Column profile (raw data)</h2>
+<div class="tbl"><table>
+<tr><th>Column</th><th>Type</th><th>Missing %</th><th>Unique</th><th>Notes</th></tr>
+{% for name, c in columns.items() %}
+<tr><td><code>{{ name }}</code></td><td>{{ c.kind }}</td><td>{{ c.missing_pct }}</td><td>{{ c.unique }}</td>
+<td>{% if c.mean is defined and c.mean is not none %}mean {{ c.mean }}, median {{ c.median }}{% if c.skew is not none %}, skew {{ c.skew }}{% endif %}{% endif %}
+{% if c.hidden_missing %} · {{ c.hidden_missing }} hidden-missing{% endif %}{% if c.detail %} · {{ c.detail }}{% endif %}</td></tr>
+{% endfor %}
+</table></div>
+
+{% if notes %}<h2>Notes</h2><ul>{% for n in notes %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}
+
+<footer>
+Generated by MOSAIC EDA (Multimodal Orchestrated System for Analysis, Inspection &amp; Cleaning).
+Every number in the findings was checked against the evidence artifacts listed. Models used: {{ models|join(", ") or "n/a" }}.
+</footer>
+</main>
+<script>
+const charts = {{ charts_json|safe }};
+const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+charts.forEach((fig, i) => {
+  const layout = Object.assign({}, fig.layout, {autosize: true});
+  if (dark) { layout.font = Object.assign({}, layout.font, {color: '#F3E9DC'}); }
+  Plotly.newPlot('chart' + (i + 1), fig.data, layout, {displaylogo: false, responsive: true});
+});
+</script>
+</body></html>

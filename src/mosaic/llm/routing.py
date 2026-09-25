@@ -13,6 +13,8 @@ def build_routes(settings: Settings) -> dict[str, list[PoolRule]]:
         "reviewer": [PoolRule("flash"), PoolRule("lite")],
         # The Strategist gets Flash only while the pool is above the reserve
         "strategist": [PoolRule("flash", min_fraction_left=reserve), PoolRule("lite")],
+        # The analyst does the hardest reasoning, so it also gets Flash above the reserve
+        "analyst": [PoolRule("flash", min_fraction_left=reserve), PoolRule("lite")],
         # Everything else runs on Lite
         "default": [PoolRule("lite")],
     }

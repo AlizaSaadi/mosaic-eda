@@ -1,5 +1,6 @@
 from typing import ClassVar
 
+import httpx
 import pytest
 from crewai.llms.base_llm import BaseLLM
 from google.genai import errors as genai_errors
@@ -101,3 +102,17 @@ def test_stop_words_reach_the_delegate():
     llm.stop = ["\nObservation:"]
     llm.call("hi")
     assert llm._delegates["flash-a"].stop == ["\nObservation:"]
+
+
+def test_timeout_falls_back_to_next_model():
+    llm, tracker = make_llm({"flash-a": httpx.ReadTimeout("slow")})
+    assert llm.call("hi") == "answer from flash-b"
+    assert tracker.try_acquire([PoolRule("flash")])[0] == "flash-b"  # flash-a set aside
+
+
+def test_delegate_gets_a_timeout():
+    from mosaic.llm.pooled_llm import CALL_TIMEOUT_S, default_delegate
+
+    owner = PooledLLM.create(role="r", route=[], tracker=QuotaTracker({}), api_key="k")
+    delegate = default_delegate("gemini-3.5-flash-lite", owner)
+    assert delegate.client_params["http_options"].timeout == CALL_TIMEOUT_S * 1000
