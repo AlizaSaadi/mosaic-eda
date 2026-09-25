@@ -21,3 +21,6 @@ flagged/
 
 # Local tool config
 .claude/
+
+# Private notes (not published)
+docs/linkedin-notes.md

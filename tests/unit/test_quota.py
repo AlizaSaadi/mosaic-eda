@@ -116,3 +116,15 @@ def test_runs_left_estimate():
     clock = FakeClock(START)
     t = make_tracker(clock)
     assert t.runs_left_estimate(calls_per_run=5) == 2
+
+
+def test_circuit_breaker_backs_off_longer_and_resets_on_success():
+    clock = FakeClock(START)
+    t = make_tracker(clock)
+    assert t.note_failure("lite-a") == 30
+    assert t.note_failure("lite-a") == 120
+    assert t.try_acquire(LITE)[0] == "lite-b"  # lite-a is set aside
+    clock.now += 121
+    assert t.try_acquire(LITE)[0] == "lite-a"
+    t.note_success("lite-a")
+    assert t.note_failure("lite-a") == 30  # back to the shortest pause

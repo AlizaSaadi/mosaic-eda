@@ -29,6 +29,7 @@ LABELS = {
     "guardrail": "Guardrail",
     "fix": "Self-correction",
     "fallback": "Model switch",
+    "review": "Review",
     "error": "Error",
     "info": "Note",
 }
@@ -52,7 +53,7 @@ def runs_left_text(settings: Settings) -> str:
 
 def to_message(event: RunEvent) -> dict:
     label = LABELS.get(event.kind, "Note")
-    if event.kind in ("guardrail", "fallback", "error") and event.detail:
+    if event.kind in ("guardrail", "fallback", "error", "review") and event.detail:
         return {
             "role": "assistant",
             "content": event.detail,
@@ -69,7 +70,8 @@ def counters_text(reporter: RunReporter, started: float) -> str:
     return (
         f"Model calls **{c['model_calls']}** · Code tool runs **{c['tool_runs']}** · "
         f"Guardrail catches **{c['guardrail_catches']}** · Self-corrections "
-        f"**{c['self_corrections']}** · Model switches **{c['fallbacks']}** · "
+        f"**{c['self_corrections']}** · Review rounds **{c['review_rounds']}** · "
+        f"Model switches **{c['fallbacks']}** · "
         f"Numbers fact-checked **{c['facts_verified']}** · {time.time() - started:.0f}s"
     )
 

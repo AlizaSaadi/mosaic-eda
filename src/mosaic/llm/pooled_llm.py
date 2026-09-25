@@ -107,8 +107,8 @@ class PooledLLM(BaseLLM):
             self._tracker.mark_rate_limited(model, daily=daily)
             reason = "daily limit" if daily else "per-minute limit"
         elif exc.code in (500, 502, 503, 504):
-            self._tracker.mark_rate_limited(model, daily=False, retry_after=30)
-            reason = f"server error {exc.code}"
+            seconds = self._tracker.note_failure(model)
+            reason = f"server error {exc.code} (set aside for {seconds:.0f}s)"
         else:
             return False
         log.warning("Gemini %s on %s, trying the next model", reason, model)
@@ -116,7 +116,7 @@ class PooledLLM(BaseLLM):
         return True
 
     def _handle_timeout(self, model: str) -> None:
-        self._tracker.mark_rate_limited(model, daily=False, retry_after=120)
+        self._tracker.note_failure(model)
         log.warning("Gemini %s timed out after %ss, trying the next model", model, CALL_TIMEOUT_S)
         self._emit(model, ok=False, fallback=True, reason=f"{CALL_TIMEOUT_S}s timeout")
 
@@ -138,6 +138,7 @@ class PooledLLM(BaseLLM):
                 last_error = exc
                 continue
             self.last_model = model
+            self._tracker.note_success(model)
             self._emit(model, ok=True, fallback=False)
             return result
         raise RuntimeError(f"No model on the '{self.role}' route could answer") from last_error
@@ -158,6 +159,7 @@ class PooledLLM(BaseLLM):
                 last_error = exc
                 continue
             self.last_model = model
+            self._tracker.note_success(model)
             self._emit(model, ok=True, fallback=False)
             return result
         raise RuntimeError(f"No model on the '{self.role}' route could answer") from last_error

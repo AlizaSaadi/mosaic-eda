@@ -43,3 +43,22 @@ class ReportNarrative(BaseModel):
     headline: str = Field(description="One-line verdict on the dataset")
     executive_summary: str = Field(description="3-5 sentences for a busy data scientist")
     next_steps: list[str] = Field(description="3-5 concrete next steps")
+
+
+class ReviewIssue(BaseModel):
+    finding: int = Field(description="1-based number of the finding this is about")
+    kind: Literal["severity", "overclaim", "causal", "unsupported", "unclear", "other"]
+    problem: str = Field(description="What is wrong, in one sentence")
+    fix_request: str = Field(description="Exactly what the analyst should change")
+    blocking: bool = Field(
+        default=True, description="True if the finding is misleading unless it's fixed"
+    )
+
+
+class ReviewVerdict(BaseModel):
+    approved: bool = Field(description="True if the findings can be published as they are")
+    issues: list[ReviewIssue] = Field(default_factory=list)
+    missed: list[str] = Field(
+        default_factory=list,
+        description="Important problems in the evidence that no finding covers",
+    )

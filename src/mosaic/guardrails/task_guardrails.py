@@ -17,8 +17,8 @@ from pydantic import BaseModel, ValidationError
 
 from mosaic.events.reporter import RunReporter
 from mosaic.evidence.store import EvidenceStore
-from mosaic.models.agent_outputs import FindingsReport, TriageBrief
-from mosaic.tables.cleaning import PlanRun, execute_plan
+from mosaic.models.agent_outputs import FindingsReport, ReviewVerdict, TriageBrief
+from mosaic.tables.cleaning import PlanRun, distribution_shifts, execute_plan
 from mosaic.tables.ops import CleaningPlan
 
 Guardrail = Callable[[TaskOutput], tuple[bool, Any]]
@@ -108,6 +108,9 @@ def plan_guardrail(ctx: GuardContext) -> Guardrail:
         run = execute_plan(plan, ctx.df, ctx.store)
         if not run.ok:
             return _reject(ctx, "Cleaning plan failed the dry run", run.errors)
+        shifts = distribution_shifts(ctx.df, run)
+        if shifts:
+            return _reject(ctx, "Cleaning plan distorts the data", shifts)
         ctx.plan_run = run
         ctx.reporter.emit(
             "step",
@@ -159,17 +162,25 @@ def findings_guardrail(ctx: GuardContext) -> Guardrail:
                     )
                 elif actual is None:
                     shown = " or ".join(str(c) for c in candidates)
+                    where = [f"'{k}' in {a}" for a, k in ctx.store.find_value(claimed)]
+                    elsewhere = f" ({claimed} is {' or '.join(where)})" if where else ""
                     problems.append(
-                        f"{label}: claims {key} = {claimed}, but the evidence says {shown}."
+                        f"{label}: claims {key} = {claimed}, but the cited evidence says "
+                        f"{shown}{elsewhere}."
                     )
                 else:
                     verified += 1
             claimed_values = [m.value for m in f.claimed_metrics]
             for value in statement_numbers(f.statement):
                 if not any(close(value, c) or close(value, round(c, 2)) for c in claimed_values):
+                    hint = "Add it under its evidence key, or remove the number."
+                    where = ctx.store.find_value(value)
+                    if where:
+                        spots = " or ".join(f"'{k}' in {a}" for a, k in where)
+                        hint = f"It matches {spots}: add that key and cite that artifact."
                     problems.append(
                         f"{label}: the statement uses {value:g}, but claimed_metrics has no "
-                        "matching entry. Add it under its evidence key, or remove the number."
+                        f"matching entry. {hint}"
                     )
             if len(problems) == before:
                 passing.append(f.model_dump())
@@ -180,13 +191,34 @@ def findings_guardrail(ctx: GuardContext) -> Guardrail:
         if problems:
             return _reject(ctx, "Findings failed the fact check", problems)
         ctx.verified = verified
-        ctx.reporter.count("facts_verified", verified)
+        ctx.reporter.counters["facts_verified"] = verified  # latest accepted set
         ctx.reporter.emit(
             "step",
             "Findings passed the fact check",
             f"{verified} numbers checked against the evidence",
             "done",
         )
+        return True, output
+
+    return check
+
+
+def review_guardrail(ctx: GuardContext, n_findings: Callable[[], int]) -> Guardrail:
+    def check(output: TaskOutput):  # CrewAI rejects string annotations here
+        try:
+            verdict = parse_output(output, ReviewVerdict)
+        except (ValidationError, ValueError) as exc:
+            return _reject(ctx, "Review isn't valid", [f"Invalid JSON: {str(exc)[:300]}"])
+        count = n_findings()
+        problems = [
+            f"Issue about finding {i.finding}: findings are numbered 1 to {count}."
+            for i in verdict.issues
+            if not 1 <= i.finding <= count
+        ]
+        if not verdict.approved and not verdict.issues and not verdict.missed:
+            problems.append("You didn't approve, so list the issues or missed problems.")
+        if problems:
+            return _reject(ctx, "Review output isn't consistent", problems)
         return True, output
 
     return check

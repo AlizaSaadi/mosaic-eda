@@ -133,3 +133,62 @@ def test_passing_findings_are_kept_when_others_fail(ctx):
         "region.missing_pct",
         "duplicate_pct",
     ]
+
+
+def test_plan_that_distorts_a_distribution_is_rejected(tmp_path):
+    import numpy as np
+
+    rng = np.random.default_rng(1)
+    values = [f"{v:.2f}" for v in rng.lognormal(3, 1, 300)]
+    df = pd.DataFrame({"amount": values}, dtype="str")
+    ctx = GuardContext(
+        store=EvidenceStore(tmp_path), reporter=RunReporter(), df=df, columns=["amount"]
+    )
+    plan = {
+        "summary": "s",
+        "ops": [
+            {"op": "cast_numeric", "columns": ["amount"], "rationale": "r"},
+            {
+                "op": "winsorize",
+                "columns": ["amount"],
+                "params": {"lower": 0.25, "upper": 0.75},
+                "rationale": "r",
+            },
+        ],
+    }
+    ok, message = plan_guardrail(ctx)(out(plan))
+    assert not ok and "shifts its distribution" in message
+
+
+def test_review_guardrail_checks_finding_numbers(ctx):
+    from mosaic.guardrails.task_guardrails import review_guardrail
+
+    check = review_guardrail(ctx, lambda: 3)
+    bad = {
+        "approved": False,
+        "missed": [],
+        "issues": [{"finding": 7, "kind": "severity", "problem": "p", "fix_request": "f"}],
+    }
+    ok, message = check(out(bad))
+    assert not ok and "numbered 1 to 3" in message
+    ok, message = check(out({"approved": False, "issues": [], "missed": []}))
+    assert not ok and "list the issues" in message
+    ok, _ = check(out({"approved": True, "issues": [], "missed": []}))
+    assert ok
+
+
+def test_rejection_points_to_where_a_number_really_is(ctx):
+    ctx.store.add("tbl_quality", "profile", "t", "q", {"score": 100.0})
+    bad = [finding("Quality reached 100 after cleaning.", {}), *GOOD[1:]]
+    ok, message = findings_guardrail(ctx)(out({"findings": bad}))
+    assert not ok and "'score' in tbl_quality_001" in message
+
+
+def test_rounded_numbers_pass_the_fact_check(ctx):
+    rounded = [
+        finding("Region is 10.7% missing.", {"region.missing_pct": 10.7}),
+        *GOOD[:1],
+        GOOD[2],
+    ]
+    ok, _ = findings_guardrail(ctx)(out({"findings": rounded}))
+    assert ok

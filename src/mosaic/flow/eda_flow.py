@@ -1,9 +1,10 @@
 """The MOSAIC Flow: code routes the job, agents reason inside their own steps.
 
-Phase 2 handles tables end to end:
-ingest -> route -> profile (code) -> triage (agent) -> plan cleaning (agent, dry-run
-guardrail) -> apply cleaning + re-profile (code) -> findings (agent, fact-check
-guardrail) -> summary (agent) -> report (code).
+Tables, end to end:
+ingest -> route -> profile (code) -> triage (agent) -> plan cleaning (agent; dry-run and
+distribution guardrails; safe-only fallback) -> apply cleaning + re-profile (code) ->
+findings (agent; fact-check guardrail) -> review (agent) -> [revise -> review] at most
+twice -> summary (agent) -> report (code).
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from crewai.flow.flow import Flow, listen, router, start
+from crewai.flow.flow import Flow, listen, or_, router, start
 from crewai.flow.runtime import FlowState
 from pydantic import Field, PrivateAttr
 
@@ -23,9 +24,19 @@ from mosaic.guardrails.task_guardrails import GuardContext, parse_output
 from mosaic.ingest.models import IngestError, Modality
 from mosaic.ingest.service import ingest
 from mosaic.llm.quota import QuotaExhausted
-from mosaic.models.agent_outputs import FindingsReport, ReportNarrative, TriageBrief
+from mosaic.models.agent_outputs import (
+    FindingsReport,
+    ReportNarrative,
+    ReviewVerdict,
+    TriageBrief,
+)
 from mosaic.reporting.html import render_report
-from mosaic.tables.cleaning import export_clean, pipeline_script
+from mosaic.tables.cleaning import (
+    conservative_plan,
+    execute_plan,
+    export_clean,
+    pipeline_script,
+)
 from mosaic.tables.load import LoadedTable, load_table
 from mosaic.tables.ops import CleaningPlan, catalog_text
 from mosaic.tables.profile import ProfileResult, profile_table
@@ -50,6 +61,14 @@ class EDAState(FlowState):
     rows_after: int = 0
     outputs: dict[str, str] = Field(default_factory=dict)
     timings: dict[str, float] = Field(default_factory=dict)
+    review: dict[str, Any] | None = None
+    review_history: list[dict[str, Any]] = Field(default_factory=list)
+    revision_round: int = 0
+    revise_failed: bool = False
+
+
+MAX_REVISIONS = 2
+CHECK_KINDS = ("guardrail", "fix", "fallback", "review")
 
 
 class EDAFlow(Flow[EDAState]):
@@ -65,7 +84,9 @@ class EDAFlow(Flow[EDAState]):
         flow = cls()
         flow._rt = runtime
         flow._guard = GuardContext(store=runtime.store, reporter=runtime.reporter)
-        flow._crew = TableCrew(runtime.llm_for, flow._guard, retries=2)
+        flow._crew = TableCrew(
+            runtime.llm_for, flow._guard, retries=2, n_findings=lambda: len(flow.state.findings)
+        )
         return flow
 
     # ---- helpers ----
@@ -198,12 +219,29 @@ class EDAFlow(Flow[EDAState]):
                 "profile_brief": self._rt.store.brief(("profile",)),
                 "catalog": catalog_text(),
             },
+            fatal=False,
         )
-        if result is None:
-            return
-        plan = parse_output(result.tasks_output[0], CleaningPlan)
-        self.state.plan = plan.model_dump()
+        if result is not None:
+            plan = parse_output(result.tasks_output[0], CleaningPlan)
+            self.state.plan = plan.model_dump()
+        elif self._ok():
+            self._use_conservative_plan()
         self._timed("plan_cleaning", t0)
+
+    def _use_conservative_plan(self) -> None:
+        """Self-correction level 3 fallback: only format and type fixes, nothing lossy."""
+        plan = conservative_plan(self._raw.types)
+        run = execute_plan(plan, self._table.df, self._rt.store)
+        if not run.ok:
+            self._fail("Neither the proposed plans nor the safe fallback passed the checks.")
+            return
+        self._guard.plan_run = run
+        self.state.plan = plan.model_dump()
+        self.state.notes.append(
+            "The strategist's plans kept failing the checks, so a safe-only plan was used "
+            "(missing-value tokens and types fixed; nothing removed or imputed)."
+        )
+        self._step("Using the safe-only fallback plan", f"{len(plan.ops)} operations", "warning")
 
     @listen(plan_cleaning)
     def apply_cleaning(self) -> None:
@@ -271,7 +309,7 @@ class EDAFlow(Flow[EDAState]):
             # Keep only findings that passed the fact check on their own (never unverified ones)
             self.state.findings = passing
             self._guard.verified = self._guard.passing_verified
-            self._rt.reporter.count("facts_verified", self._guard.passing_verified)
+            self._rt.reporter.counters["facts_verified"] = self._guard.passing_verified
             self.state.notes.append(
                 f"Analysis partially verified: {len(passing)} finding(s) passed the fact check; "
                 "the rest were withheld because their numbers couldn't be verified."
@@ -284,11 +322,156 @@ class EDAFlow(Flow[EDAState]):
         self.state.findings = [f.model_dump() for f in report.findings]
         self._timed("analyze", t0)
 
-    @listen(analyze)
+    # ---- review loop (self-correction level 4) ----
+
+    def _numbered_findings(self) -> str:
+        lines = []
+        for i, f in enumerate(self.state.findings, 1):
+            evidence = ", ".join(f["evidence"])
+            lines.append(
+                f"{i}. [{f['severity']}] {f['title']}: {f['statement']} "
+                f"(evidence {evidence}; recommendation: {f.get('recommendation', '')})"
+            )
+        return "\n".join(lines)
+
+    def _common_inputs(self) -> dict[str, Any]:
+        return {
+            "source_name": self.state.source_name,
+            "goal": self.state.goal or "(none given)",
+            "target": self.state.target or "none",
+            "evidence_brief": self._rt.store.brief(("profile",)),
+            "cleaning_log": self._cleaning_log(),
+        }
+
+    @listen(or_("analyze", "revised"))  # "revised" is a router label, so the loop can repeat
+    def review(self) -> None:
+        if not self._ok() or self.state.revise_failed or not self.state.findings:
+            return
+        t0 = time.time()
+        self._rt.reporter.count("review_rounds")
+        result = self._run_stage(
+            "review",
+            {
+                **self._common_inputs(),
+                "findings": self._numbered_findings(),
+                "sample_note": "The full table was analyzed (no sampling).",
+            },
+            fatal=False,
+        )
+        if result is None:
+            self.state.review = None
+            if self._ok():
+                self.state.notes.append("The reviewer couldn't run, so findings weren't reviewed.")
+            return
+        verdict = parse_output(result.tasks_output[0], ReviewVerdict)
+        self.state.review = verdict.model_dump()
+        self.state.review_history.append(self.state.review)
+        blocking = [i for i in verdict.issues if i.blocking]
+        lines = [
+            f"Finding {i.finding} ({i.kind}): {i.problem} Fix: {i.fix_request}"
+            for i in verdict.issues
+        ]
+        lines += [f"Missed: {m}" for m in verdict.missed]
+        if verdict.approved and not blocking and not verdict.missed:
+            self._rt.reporter.emit("review", "Reviewer approved the findings", "", "done")
+        else:
+            title = f"Reviewer requested {len(verdict.issues)} change(s)"
+            if verdict.missed:
+                title += f" and {len(verdict.missed)} addition(s)"
+            self._rt.reporter.emit("review", title, "\n".join(lines), "rejected")
+        self._timed(f"review_{len(self.state.review_history)}", t0)
+
+    @router(review)
+    def review_gate(self) -> str:
+        if not self._ok():
+            return "stop"
+        if self.state.revise_failed:
+            return "partial"
+        verdict = self.state.review
+        if verdict is None:
+            return "approved"
+        blocking = [i for i in verdict["issues"] if i["blocking"]]
+        if verdict["approved"] and not blocking and not verdict["missed"]:
+            return "approved"
+        if self.state.revision_round < MAX_REVISIONS:
+            return "revise"
+        return "partial" if blocking else "approved"
+
+    @router("revise")
+    def revise_findings(self) -> str:
+        self.state.revision_round += 1
+        t0 = time.time()
+        verdict = self.state.review
+        requests = [
+            f"- Finding {i['finding']} ({i['kind']}): {i['problem']} Change: {i['fix_request']}"
+            for i in verdict["issues"]
+        ] + [f"- Missing: add a finding about {m}" for m in verdict["missed"]]
+        self._step(f"Revising the findings (round {self.state.revision_round} of {MAX_REVISIONS})")
+        result = self._run_stage(
+            "revise",
+            {
+                **self._common_inputs(),
+                "findings": self._numbered_findings(),
+                "review": "\n".join(requests),
+            },
+            fatal=False,
+        )
+        if result is None:
+            if self._ok():
+                self.state.revise_failed = True
+            return "revised"  # the review step skips itself and the gate publishes partially
+        report = parse_output(result.tasks_output[0], FindingsReport)
+        self.state.findings = [f.model_dump() for f in report.findings]
+        self._rt.reporter.count("self_corrections")
+        self._step(
+            "Revised findings passed the fact check", f"{len(report.findings)} findings", "done"
+        )
+        self._timed(f"revise_{self.state.revision_round}", t0)
+        return "revised"
+
+    def _apply_partial_publication(self) -> None:
+        """Withhold findings the reviewer still considers misleading."""
+        verdict = self.state.review or {"issues": []}
+        flagged = {i["finding"] for i in verdict["issues"] if i["blocking"]}
+        kept = [f for n, f in enumerate(self.state.findings, 1) if n not in flagged]
+        withheld = [f["title"] for n, f in enumerate(self.state.findings, 1) if n in flagged]
+        if withheld:
+            self.state.notes.append(
+                "Withheld after review (still misleading after revisions): " + "; ".join(withheld)
+            )
+            self._step(
+                "Withheld findings the reviewer didn't accept",
+                f"{len(withheld)} withheld",
+                "warning",
+            )
+        self.state.findings = kept
+
+    def _route_was_partial(self) -> bool:
+        verdict = self.state.review
+        if verdict is None:
+            return False
+        blocking = [i for i in verdict["issues"] if i["blocking"]]
+        return bool(blocking) and self.state.revision_round >= MAX_REVISIONS
+
+    @listen(or_("approved", "partial"))
     def write_report(self) -> None:
         if not self._ok():
             return
         t0 = time.time()
+        if self.state.revise_failed or self._route_was_partial():
+            self._apply_partial_publication()
+        if not self.state.findings:
+            self._fail("No findings passed both the fact check and the review.")
+            return
+        # Every published finding passed the fact check, so count exactly what's shown
+        shown = sum(len(f["claimed_metrics"]) for f in self.state.findings)
+        self._guard.verified = shown
+        self._rt.reporter.counters["facts_verified"] = shown
+        missed = (self.state.review or {}).get("missed") or []
+        if missed:
+            self.state.notes.append(
+                "The reviewer noted these weren't covered: " + "; ".join(missed)
+            )
         findings = json.dumps(
             [{k: f[k] for k in ("title", "statement", "severity")} for f in self.state.findings],
             indent=1,
@@ -316,6 +499,15 @@ class EDAFlow(Flow[EDAState]):
         self._render()
         self._timed("write_report", t0)
 
+    def _check_timeline(self) -> list[dict[str, Any]]:
+        events = self._rt.reporter.events()
+        start = events[0].ts if events else 0
+        return [
+            {"t": round(e.ts - start), "kind": e.kind, "title": e.title, "detail": e.detail}
+            for e in events
+            if e.kind in CHECK_KINDS or (e.status == "warning" and e.kind in ("step", "info"))
+        ]
+
     def _render(self) -> None:
         run = self._guard.plan_run
         plan = CleaningPlan.model_validate(self.state.plan)
@@ -342,6 +534,8 @@ class EDAFlow(Flow[EDAState]):
             columns=self._rt.store.get(self._raw.artifact_ids[1]).data["columns"],
             notes=self.state.notes + self._table.notes,
             models=sorted(self._rt.models_used),
+            checks=self._check_timeline(),
+            counters=dict(self._rt.reporter.counters),
         )
         self._rt.reporter.write_trace(out / "trace.json")
         self.state.outputs.update(report=str(out / "report.html"), trace=str(out / "trace.json"))

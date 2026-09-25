@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from mosaic.evidence.store import EvidenceStore
@@ -167,6 +168,7 @@ import re
 import sys
 
 import numpy as np
+import numpy as np
 import pandas as pd
 
 {_helpers_source()}
@@ -203,3 +205,89 @@ def neutralize_formulas(df: pd.DataFrame) -> pd.DataFrame:
 def export_clean(df: pd.DataFrame, path: Path) -> Path:
     neutralize_formulas(df).to_csv(path, index=False)
     return path
+
+
+# ---- checks after cleaning (self-correction level 3) ----
+
+VALUE_CHANGING = {"winsorize", "impute_median", "impute_mode", "impute_constant"}
+MAX_KS = 0.2
+
+
+def ks_statistic(a: np.ndarray, b: np.ndarray) -> float:
+    """Two-sample Kolmogorov-Smirnov statistic: the largest gap between the two ECDFs."""
+    a, b = np.sort(a), np.sort(b)
+    if not len(a) or not len(b):
+        return 0.0
+    grid = np.concatenate([a, b])
+    cdf_a = np.searchsorted(a, grid, side="right") / len(a)
+    cdf_b = np.searchsorted(b, grid, side="right") / len(b)
+    return float(np.max(np.abs(cdf_a - cdf_b)))
+
+
+def distribution_shifts(raw: pd.DataFrame, run: PlanRun, max_ks: float = MAX_KS) -> list[str]:
+    """Flag value-changing steps that distort a numeric column's distribution."""
+    problems = []
+    for step in run.steps:
+        if step.op not in VALUE_CHANGING:
+            continue
+        for col in step.columns:
+            if col not in raw.columns or col not in run.df.columns:
+                continue
+            after = pd.to_numeric(run.df[col], errors="coerce").dropna().to_numpy(float)
+            before = pipeline_helpers.to_number(raw[col]).dropna().to_numpy(float)
+            if len(before) < 20 or len(after) < 20:
+                continue
+            ks = ks_statistic(before, after)
+            if ks > max_ks:
+                problems.append(
+                    f"Step {step.index} ({step.op} on '{col}') shifts its distribution a lot "
+                    f"(KS = {ks:.2f}, limit {max_ks}). Use a milder option (flag_outliers, "
+                    "wider winsorize quantiles, add_missing_indicator) or leave it."
+                )
+    return problems
+
+
+def conservative_plan(types: dict) -> CleaningPlan:
+    """A safe-only plan built from the detected types: used when the strategist's plans fail."""
+    from mosaic.tables.ops import CleaningOp  # local import keeps the module order simple
+
+    by_kind: dict[str, list[str]] = {}
+    for col, ctype in types.items():
+        by_kind.setdefault(ctype.kind, []).append(col)
+    ops = [
+        CleaningOp(
+            op="standardize_null_tokens",
+            rationale="Turn missing-value tokens into real missing values.",
+        )
+    ]
+    mapping = {
+        "currency": "strip_currency",
+        "percent": "parse_percent",
+        "datetime": "parse_dates",
+        "boolean": "parse_boolean",
+        "id": "mark_as_id",
+    }
+    for kind, op in mapping.items():
+        if by_kind.get(kind):
+            ops.append(
+                CleaningOp(op=op, columns=by_kind[kind], rationale=f"Detected {kind} columns.")
+            )
+    numeric = by_kind.get("numeric", [])
+    for decimal_comma in (False, True):
+        cols = [c for c in numeric if ("decimal comma" in types[c].detail) == decimal_comma]
+        if cols:
+            ops.append(
+                CleaningOp(
+                    op="cast_numeric",
+                    columns=cols,
+                    params={"decimal_comma": decimal_comma},
+                    rationale="Numbers stored as text.",
+                )
+            )
+    if by_kind.get("empty"):
+        ops.append(CleaningOp(op="drop_empty_columns", rationale="Columns with no values."))
+    return CleaningPlan(
+        summary="Safe-only fallback plan: fix missing-value tokens and types, "
+        "drop empty columns. Nothing else is changed.",
+        ops=ops,
+    )

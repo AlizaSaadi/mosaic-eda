@@ -122,6 +122,23 @@ class EvidenceStore:
         """Every value for `key` across the cited artifacts (one per artifact at most)."""
         return [v for a in artifact_ids if (v := self.lookup([a], key)) is not None]
 
+    def find_value(
+        self, value: float, rel_tol: float = 0.01, abs_tol: float = 0.06, limit: int = 3
+    ) -> list[tuple[str, str]]:
+        """(artifact ID, key) pairs whose value matches, to point agents to the right evidence."""
+        hits = []
+        for artifact in self._items.values():
+            if artifact.kind == "chart":
+                continue
+            for key, v in flatten(artifact.data).items():
+                if isinstance(v, bool) or not isinstance(v, (int, float)):
+                    continue
+                if abs(v - value) <= max(rel_tol * abs(v), abs_tol):
+                    hits.append((artifact.id, key.removeprefix("columns.")))
+                    if len(hits) >= limit:
+                        return hits
+        return hits
+
     def brief(self, kinds: tuple[str, ...] = ()) -> str:
         """The summaries agents see: one line per artifact, with its ID."""
         items = [a for a in self._items.values() if not kinds or a.kind in kinds]

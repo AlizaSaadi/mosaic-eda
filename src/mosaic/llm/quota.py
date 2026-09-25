@@ -42,6 +42,7 @@ class ModelState:
     day_key: str = ""
     day_count: int = 0
     blocked_until: float = 0.0
+    failures: int = 0  # consecutive overloads/timeouts, for the circuit breaker
 
 
 def day_key(ts: float) -> str:
@@ -157,6 +158,21 @@ class QuotaTracker:
                 state.blocked_until = next_reset(now)
             else:
                 state.blocked_until = now + (retry_after or MINUTE)
+
+    BACKOFF = (30.0, 120.0, 300.0, 600.0)
+
+    def note_failure(self, model: str) -> float:
+        """An overload or timeout: set the model aside for longer each time it repeats."""
+        with self._lock:
+            state = self._models[model]
+            seconds = self.BACKOFF[min(state.failures, len(self.BACKOFF) - 1)]
+            state.failures += 1
+            state.blocked_until = max(state.blocked_until, self._clock() + seconds)
+            return seconds
+
+    def note_success(self, model: str) -> None:
+        with self._lock:
+            self._models[model].failures = 0
 
     def refund(self, model: str) -> None:
         """Give back a slot for a request that never reached Google."""

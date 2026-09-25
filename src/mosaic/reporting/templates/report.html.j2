@@ -37,6 +37,9 @@ code{font:13px 'JetBrains Mono',monospace}
 .charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:12px}
 .chart{background:var(--surface);border:1px solid var(--border);border-radius:10px;min-height:340px}
 @media (max-width:520px){.charts{grid-template-columns:1fr}}
+.timeline{list-style:none;padding:0;margin:0}.timeline li{border-left:2px solid var(--border);padding:4px 0 10px 14px}
+.timeline .t{font:12px 'JetBrains Mono',monospace;color:var(--muted);margin-right:6px}
+.timeline pre{white-space:pre-wrap;font:13px/1.5 'JetBrains Mono',monospace;color:var(--muted);margin:4px 0 0}
 ul{padding-left:20px} footer{margin-top:40px;color:var(--muted);font-size:13px}
 </style>
 </head>
@@ -68,6 +71,13 @@ ul{padding-left:20px} footer{margin-top:40px;color:var(--muted);font-size:13px}
 <h2>Next steps</h2>
 <ul>{% for s in narrative.next_steps %}<li>{{ s }}</li>{% endfor %}</ul>
 {% endif %}
+
+<h2>How the agents checked themselves</h2>
+<p class="ev">Model calls {{ counters.get('model_calls', 0) }} · guardrail catches {{ counters.get('guardrail_catches', 0) }} · self-corrections {{ counters.get('self_corrections', 0) }} · review rounds {{ counters.get('review_rounds', 0) }} · model switches {{ counters.get('fallbacks', 0) }} · numbers fact-checked {{ facts_verified }}</p>
+<ol class="timeline">
+{% for c in checks %}<li><span class="t">+{{ c.t }}s</span><b>{{ c.title }}</b>{% if c.detail %}<pre>{{ c.detail }}</pre>{% endif %}</li>
+{% else %}<li>No corrections were needed: every plan and finding passed on the first try.</li>{% endfor %}
+</ol>
 
 <h2>Cleaning applied</h2>
 <p>{{ plan_summary }}</p>

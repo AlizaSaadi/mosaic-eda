@@ -17,9 +17,15 @@ from mosaic.guardrails.task_guardrails import (
     GuardContext,
     findings_guardrail,
     plan_guardrail,
+    review_guardrail,
     triage_guardrail,
 )
-from mosaic.models.agent_outputs import FindingsReport, ReportNarrative, TriageBrief
+from mosaic.models.agent_outputs import (
+    FindingsReport,
+    ReportNarrative,
+    ReviewVerdict,
+    TriageBrief,
+)
 from mosaic.tables.ops import CleaningPlan
 
 LLMFactory = Callable[[str, float], BaseLLM]  # (role, temperature) -> LLM
@@ -37,10 +43,17 @@ class TableCrew:
     agents_config = "config/agents.yaml"
     tasks_config = "config/tasks.yaml"
 
-    def __init__(self, llm_for: LLMFactory, guard: GuardContext, retries: int = 2) -> None:
+    def __init__(
+        self,
+        llm_for: LLMFactory,
+        guard: GuardContext,
+        retries: int = 2,
+        n_findings: Callable[[], int] = lambda: 0,
+    ) -> None:
         self.llm_for = llm_for
         self.guard = guard
         self.retries = retries
+        self.n_findings = n_findings  # the review guardrail checks finding numbers against it
 
     # ---- agents ----
 
@@ -73,6 +86,14 @@ class TableCrew:
         return Agent(
             config=self.agents_config["report_writer"],
             llm=self.llm_for("default", 0.4),
+            **AGENT_DEFAULTS,
+        )
+
+    @agent
+    def reviewer(self) -> Agent:
+        return Agent(
+            config=self.agents_config["reviewer"],
+            llm=self.llm_for("reviewer", 0.0),
             **AGENT_DEFAULTS,
         )
 
@@ -120,6 +141,28 @@ class TableCrew:
             name="Report summary",
         )
 
+    @task
+    def review(self) -> Task:
+        return Task(
+            config=self.tasks_config["review"],
+            agent=self.reviewer(),
+            output_pydantic=ReviewVerdict,
+            guardrail=review_guardrail(self.guard, self.n_findings),
+            guardrail_max_retries=self.retries,
+            name="Review",
+        )
+
+    @task
+    def revise(self) -> Task:
+        return Task(
+            config=self.tasks_config["revise"],
+            agent=self.insight_analyst(),
+            output_pydantic=FindingsReport,
+            guardrail=findings_guardrail(self.guard),
+            guardrail_max_retries=self.retries + 1,
+            name="Revised findings",
+        )
+
     # ---- one-task crews, run by the Flow between code steps ----
 
     def stage(self, name: str) -> Crew:
@@ -128,6 +171,8 @@ class TableCrew:
             "plan_cleaning": (self.cleaning_strategist, self.plan_cleaning),
             "analyze": (self.insight_analyst, self.analyze),
             "write_summary": (self.report_writer, self.write_summary),
+            "review": (self.reviewer, self.review),
+            "revise": (self.insight_analyst, self.revise),
         }
         make_agent, make_task = pairs[name]
         return Crew(
