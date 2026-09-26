@@ -32,19 +32,19 @@ h1, h2, h3, .m-display { font-family: "Fraunces", Georgia, serif !important; let
 .m-screen { animation: fadein .45s ease both; }
 @keyframes fadein { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
-.welcome { text-align: center; padding: 18px 0 4px; }
-.welcome .eyebrow { color: var(--m-accent); font: 500 13px/1.4 Inter, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
-.welcome h1 { font-size: clamp(30px, 5vw, 48px); margin: 6px 0 4px; color: var(--m-text); }
-.welcome .by { color: var(--m-muted); font-size: 17px; margin-bottom: 10px; }
-.welcome .meet { font-family: "Fraunces", serif; font-size: 22px; color: var(--m-text); margin: 18px 0 0; }
-.welcome .ask { color: var(--m-muted); font-size: 15px; margin: 10px auto 0; max-width: 560px; }
+.gradio-container .welcome { text-align: center; padding: 18px 0 4px; }
+.gradio-container .welcome .eyebrow { color: var(--m-accent); font: 500 13px/1.4 Inter, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+.gradio-container .welcome h1 { font-size: clamp(30px, 5vw, 48px) !important; margin: 6px 0 4px !important; color: var(--m-text); }
+.gradio-container .welcome .by { color: var(--m-muted); font-size: 17px; margin-bottom: 10px; }
+.gradio-container .welcome .meet { font-family: "Fraunces", serif; font-size: 22px; color: var(--m-text); margin: 18px 0 0; }
+.gradio-container .welcome .ask { color: var(--m-muted); font-size: 15px; margin: 10px auto 0; max-width: 560px; }
 
-.lineup svg { width: 100%; max-width: 760px; display: block; margin: 0 auto; }
-.lineup .cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; max-width: 900px; margin: 0 auto; }
-.lineup .card { background: var(--m-surface); border: 1px solid var(--m-border); border-radius: 12px; padding: 10px 8px; }
-.lineup .n { font-family: "Fraunces", serif; font-size: 18px; color: var(--m-text); }
-.lineup .r { color: var(--m-accent); font-size: 12.5px; font-weight: 500; }
-.lineup .b { color: var(--m-muted); font-size: 12.5px; line-height: 1.45; margin-top: 4px; }
+.gradio-container .lineup svg { width: 100%; max-width: 760px; display: block; margin: 0 auto; }
+.gradio-container .lineup .cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; max-width: 900px; margin: 0 auto; }
+.gradio-container .lineup .card { background: var(--m-surface); border: 1px solid var(--m-border); border-radius: 12px; padding: 10px 8px; }
+.gradio-container .lineup .n { font-family: "Fraunces", serif; font-size: 18px; color: var(--m-text); }
+.gradio-container .lineup .r { color: var(--m-accent); font-size: 12.5px; font-weight: 500; }
+.gradio-container .lineup .b { color: var(--m-muted); font-size: 12.5px; line-height: 1.45; margin-top: 4px; }
 @media (max-width: 720px) { .lineup .cards { grid-template-columns: repeat(2, 1fr); } }
 
 .intro { transform-box: fill-box; transform-origin: 50% 100%; animation: wobblein .9s cubic-bezier(.3, 1.5, .5, 1) both; }
@@ -55,11 +55,11 @@ h1, h2, h3, .m-display { font-family: "Fraunces", Georgia, serif !important; let
   100% { transform: none; }
 }
 
-.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 4px 0 8px; }
-.step { background: var(--m-surface); border: 1px solid var(--m-border); border-radius: 12px; padding: 14px; }
-.step .k { color: var(--m-accent); font: 500 12px Inter, sans-serif; letter-spacing: .06em; text-transform: uppercase; }
-.step .t { font-family: "Fraunces", serif; font-size: 18px; color: var(--m-text); margin: 4px 0; }
-.step .d { color: var(--m-muted); font-size: 14px; line-height: 1.5; }
+.gradio-container .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 4px 0 8px; }
+.gradio-container .step { background: var(--m-surface); border: 1px solid var(--m-border); border-radius: 12px; padding: 14px; }
+.gradio-container .step .k { color: var(--m-accent); font: 500 12px Inter, sans-serif; letter-spacing: .06em; text-transform: uppercase; }
+.gradio-container .step .t { font-family: "Fraunces", serif; font-size: 18px; color: var(--m-text); margin: 4px 0; }
+.gradio-container .step .d { color: var(--m-muted); font-size: 14px; line-height: 1.5; }
 @media (max-width: 720px) { .steps { grid-template-columns: 1fr; } }
 
 /* ---- the creatures ---- */
@@ -93,9 +93,9 @@ h1, h2, h3, .m-display { font-family: "Fraunces", Georgia, serif !important; let
 .member .bubble.show { opacity: 1; transform: none; }
 
 /* ---- the office ---- */
-.office { background: var(--m-surface); border: 1px solid var(--m-border); border-radius: 16px; padding: 10px; }
-.office svg { width: 100%; display: block; }
-.office-caption { text-align: center; font-family: "Fraunces", serif; font-size: 20px; color: var(--m-text); padding: 10px 0 4px; }
+.gradio-container .office { background: var(--m-surface); border: 1px solid var(--m-border); border-radius: 16px; padding: 10px; }
+.gradio-container .office svg { width: 100%; display: block; }
+.gradio-container .office-caption { text-align: center; font-family: "Fraunces", serif; font-size: 20px; color: var(--m-text); padding: 10px 0 4px; }
 .desk .screen { transition: fill .3s; }
 .desk.on .screen { fill: #DCEBF0; animation: glow 1.2s ease-in-out infinite; }
 @keyframes glow { 0%, 100% { fill: #DCEBF0; } 50% { fill: #F3E9DC; } }
@@ -119,10 +119,10 @@ h1, h2, h3, .m-display { font-family: "Fraunces", Georgia, serif !important; let
 .drink-choice { display: flex; gap: 12px; justify-content: center; }
 
 /* ---- results and review ---- */
-.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 6px 0 4px; }
-.tile { background: var(--m-surface); border: 1px solid var(--m-border); border-radius: 12px; padding: 12px 14px; }
-.tile .k { color: var(--m-muted); font-size: 12.5px; }
-.tile .v { font-family: "Fraunces", serif; font-size: 26px; color: var(--m-text); }
+.gradio-container .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 6px 0 4px; }
+.gradio-container .tile { background: var(--m-surface); border: 1px solid var(--m-border); border-radius: 12px; padding: 12px 14px; }
+.gradio-container .tile .k { color: var(--m-muted); font-size: 12.5px; }
+.gradio-container .tile .v { font-family: "Fraunces", serif; font-size: 26px; color: var(--m-text); }
 @media (max-width: 720px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
 
 .review-box .prose { padding: 10px 16px 0; }
