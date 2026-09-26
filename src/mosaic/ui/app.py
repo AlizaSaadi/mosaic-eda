@@ -15,6 +15,7 @@ from mosaic.config import PROJECT_ROOT, Settings, get_settings
 from mosaic.events.reporter import ACTIVE, RunEvent, RunReporter, ensure_listener
 from mosaic.flow.eda_flow import EDAFlow
 from mosaic.flow.runtime import JobRuntime
+from mosaic.ingest.models import count_label
 from mosaic.llm.quota import QuotaTracker
 from mosaic.llm.routing import build_tracker
 from mosaic.workspace import create_workspace, sweep_stale
@@ -121,7 +122,7 @@ def results_markdown(state) -> str:
 
 
 def choice_markdown(counts: dict[str, int]) -> str:
-    found = ", ".join(f"**{n} {m}**" for m, n in counts.items())
+    found = ", ".join(f"**{count_label(m, n)}**" for m, n in counts.items())
     return (
         f"### This dataset has several data types: {found}\n\n"
         "**Analyze each type, then link them** runs a separate crew for every type (two at a "

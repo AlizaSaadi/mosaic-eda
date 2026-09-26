@@ -82,3 +82,18 @@ class SampleSet(BaseModel):
     @property
     def is_sample(self) -> bool:
         return len(self.files) < self.total_available
+
+
+_NOUNS = {
+    "table": ("table", "tables"),
+    "text": ("text file", "text files"),
+    "image": ("image", "images"),
+    "audio": ("audio clip", "audio clips"),
+    "video": ("video", "videos"),
+}
+
+
+def count_label(modality: str, n: int) -> str:
+    """'1 table', '38 images', '2 audio clips'."""
+    one, many = _NOUNS.get(str(modality), (str(modality), str(modality)))
+    return f"{n} {one if n == 1 else many}"

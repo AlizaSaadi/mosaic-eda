@@ -27,7 +27,7 @@ from mosaic.flow.adapters import Adapter, make_adapter
 from mosaic.flow.group import bundle, group_chart, record_group, run_parts
 from mosaic.flow.runtime import JobRuntime
 from mosaic.guardrails.task_guardrails import GuardContext, parse_output
-from mosaic.ingest.models import ANALYZABLE, FileManifest, IngestError
+from mosaic.ingest.models import ANALYZABLE, FileManifest, IngestError, count_label
 from mosaic.ingest.service import ingest
 from mosaic.llm.quota import JobTimeout, QuotaExhausted
 from mosaic.models.agent_outputs import (
@@ -217,7 +217,7 @@ class EDAFlow(Flow[EDAState]):
         """Several data types: pause for the user's choice, or set up group mode."""
         counts = {m.value: n for m, n in manifest.counts.items() if m in ANALYZABLE}
         self.state.mixed_counts = counts
-        listing = ", ".join(f"{n} {m}" for m, n in counts.items())
+        listing = ", ".join(count_label(m, n) for m, n in counts.items())
         if self.state.mixed_choice != "group":
             self.state.status = "needs_choice"
             self._step("Several data types found: choose how to analyze them", listing, "done")
