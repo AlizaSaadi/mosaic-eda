@@ -18,6 +18,7 @@ from mosaic.flow.runtime import JobRuntime
 from mosaic.ingest.models import count_label
 from mosaic.llm.quota import QuotaTracker
 from mosaic.llm.routing import build_tracker
+from mosaic.reporting.share import sharing_configured
 from mosaic.workspace import create_workspace, sweep_stale
 
 EXAMPLE_CSV = PROJECT_ROOT / "examples" / "datasets" / "messy_sales.csv"
@@ -116,6 +117,9 @@ def results_markdown(state) -> str:
         lines += [f"- **{f['title']}.** {f['statement']}" for f in p["finding_list"]]
     if n.get("next_steps"):
         lines += ["", "### Next steps", *[f"1. {s}" for s in n["next_steps"]]]
+    if state.share_urls:
+        lines += ["", "### Share links (public)"]
+        lines += [f"- [{name}]({url})" for name, url in state.share_urls.items()]
     if state.notes:
         lines += ["", "### Notes", *[f"- {x}" for x in state.notes]]
     return "\n".join(lines)
@@ -132,7 +136,9 @@ def choice_markdown(counts: dict[str, int]) -> str:
     )
 
 
-def run_analysis(upload, url: str, goal: str, user_key: str, mixed: str = "ask"):
+def run_analysis(
+    upload, url: str, goal: str, user_key: str, mixed: str = "ask", share: bool = False
+):
     settings = get_settings()
     source = upload if upload else (url or "").strip()
     empty_plots = [gr.update(value=None, visible=False)] * MAX_PLOTS
@@ -178,7 +184,12 @@ def run_analysis(upload, url: str, goal: str, user_key: str, mixed: str = "ask")
     ACTIVE.reporter = runtime.reporter
     flow = EDAFlow.for_job(runtime)
     started = time.time()
-    inputs = {"source": str(source), "goal": goal or "", "mixed_choice": mixed or "ask"}
+    inputs = {
+        "source": str(source),
+        "goal": goal or "",
+        "mixed_choice": mixed or "ask",
+        "share": bool(share),
+    }
     thread = threading.Thread(target=lambda: flow.kickoff(inputs=inputs), daemon=True)
     thread.start()
 
@@ -205,7 +216,7 @@ def run_analysis(upload, url: str, goal: str, user_key: str, mixed: str = "ask")
         state.outputs["trace"] = str(runtime.reporter.write_trace(runtime.ws.out / "trace.json"))
     files = [
         state.outputs[k]
-        for k in ("report", "cleaned", "manifest", "pipeline", "trace")
+        for k in ("report", "pdf", "cleaned", "manifest", "pipeline", "trace")
         if k in state.outputs
     ]
     adapter = flow._adapter
@@ -274,6 +285,13 @@ def build_app() -> gr.Blocks:
                         type="password",
                         info="Used for this run only, never stored.",
                     )
+                share = gr.Checkbox(
+                    label="Save a public copy of the report and get a share link",
+                    info="Only the HTML and PDF reports are saved (quotes are short and "
+                    "masked); your data isn't.",
+                    value=False,
+                    visible=sharing_configured(settings),
+                )
                 run_btn = gr.Button("Analyze", variant="primary")
                 example_btns = [(gr.Button(text), path, g) for text, path, g in EXAMPLES]
                 runs_left = gr.Markdown(runs_left_text(settings))
@@ -301,7 +319,8 @@ def build_app() -> gr.Blocks:
             height="auto",
         )
         downloads = gr.File(
-            label="Downloads: report, cleaned data, pipeline script, trace", file_count="multiple"
+            label="Downloads: report (HTML and PDF), cleaned data, pipeline script, trace",
+            file_count="multiple",
         )
         gr.Markdown(
             f"<small>Version {__version__} · Built with CrewAI and Gradio · "
@@ -313,11 +332,11 @@ def build_app() -> gr.Blocks:
             choice_text,
         ]  # fmt: skip
         ask = gr.State("ask")
-        run_btn.click(run_analysis, [upload, url, goal, user_key, ask], outputs)
-        continue_btn.click(run_analysis, [upload, url, goal, user_key, mixed], outputs)
+        run_btn.click(run_analysis, [upload, url, goal, user_key, ask, share], outputs)
+        continue_btn.click(run_analysis, [upload, url, goal, user_key, mixed, share], outputs)
         for button, path, example_goal in example_btns:
             button.click(lambda p=path, g=example_goal: (str(p), g), None, [upload, goal]).then(
-                run_analysis, [upload, url, goal, user_key, ask], outputs
+                run_analysis, [upload, url, goal, user_key, ask, share], outputs
             )
     return demo
 

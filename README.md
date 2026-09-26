@@ -18,8 +18,9 @@ A crew of AI agents, built with [CrewAI](https://www.crewai.com/), that cleans, 
 fact-checks any dataset: tables, text, images, audio, and video, or a zip of them.
 
 > Status: tables, text (documents, transcripts, and logs), images, audio, and video work end
-> to end, with review and revision loops, and mixed zips can be analyzed type by type and
-> then linked (Phase 7). PDF reports and report storage are next.
+> to end, with review and revision loops; mixed zips can be analyzed type by type and then
+> linked; every report comes as HTML and PDF, with optional public share links (Phase 8).
+> UI polish is next.
 > The full design is in [`docs/MOSAIC-EDA-Blueprint.pdf`](docs/MOSAIC-EDA-Blueprint.pdf).
 
 ## How it works (short version)

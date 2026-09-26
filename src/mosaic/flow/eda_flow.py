@@ -37,6 +37,8 @@ from mosaic.models.agent_outputs import (
     TriageBrief,
 )
 from mosaic.reporting.html import render_report
+from mosaic.reporting.pdf import render_pdf
+from mosaic.reporting.share import share_report
 from mosaic.tables.ops import CleaningPlan
 
 
@@ -69,6 +71,8 @@ class EDAState(FlowState):
     mixed_counts: dict[str, int] = Field(default_factory=dict)
     group: bool = False
     parts: list[dict[str, Any]] = Field(default_factory=list)
+    share: bool = False  # opt-in: save a public copy of the report
+    share_urls: dict[str, str] = Field(default_factory=dict)
 
 
 MAX_REVISIONS = 2
@@ -662,6 +666,7 @@ class EDAFlow(Flow[EDAState]):
         else:
             self.state.notes.append("The written summary couldn't be generated for this run.")
         self._render()
+        self._share()
         self._timed("write_report", t0)
 
     def _check_timeline(self) -> list[dict[str, Any]]:
@@ -673,6 +678,32 @@ class EDAFlow(Flow[EDAState]):
             if e.kind in CHECK_KINDS or (e.status == "warning" and e.kind in ("step", "info"))
         ]
 
+    def _share(self) -> None:
+        """Upload the HTML and PDF reports and keep their links (only when asked)."""
+        if not self.state.share or self.state.status != "done":
+            return
+        try:
+            self.state.share_urls = share_report(
+                self._rt.settings, self._rt.ws.job_id, self._rt.ws.out, api=self._rt.share_api
+            )
+        except Exception as exc:  # the report is still downloadable
+            self._rt.reporter.emit(
+                "info", "The report couldn't be shared", str(exc)[:300], "warning"
+            )
+            return
+        links = "; ".join(self.state.share_urls.values())
+        self._step("Saved a shareable copy", links, "done")
+
+    def _write_reports(self, **ctx: Any) -> None:
+        """The HTML report, and the same content as a PDF (a PDF problem isn't fatal)."""
+        out = self._rt.ws.out
+        render_report(out / "report.html", **ctx)
+        try:
+            render_pdf(out / "report.pdf", **ctx)
+            self.state.outputs["pdf"] = str(out / "report.pdf")
+        except Exception as exc:
+            self._rt.reporter.emit("info", "The PDF couldn't be made", str(exc)[:300], "warning")
+
     def _render(self) -> None:
         if self.state.group:
             self._render_group()
@@ -681,8 +712,7 @@ class EDAFlow(Flow[EDAState]):
         plan = CleaningPlan.model_validate(self.state.plan)
         out = self._rt.ws.out
         charts = [self._rt.store.get(cid).data["figure"] for cid in self._adapter.chart_ids[:8]]
-        render_report(
-            out / "report.html",
+        self._write_reports(
             source_name=self.state.source_name,
             narrative=self.state.narrative,
             triage=self.state.triage,
@@ -715,8 +745,7 @@ class EDAFlow(Flow[EDAState]):
         links = next(
             (a.data for a in self._rt.store.all("profile") if a.id == "mix_links_001"), None
         )
-        render_report(
-            out / "report.html",
+        self._write_reports(
             source_name=self.state.source_name,
             narrative=self.state.narrative,
             triage=None,
