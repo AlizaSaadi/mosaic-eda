@@ -138,11 +138,14 @@ def execute_plan(
         work = after
     loss = 1 - len(work) / max(start_rows, 1)
     if loss > max_row_loss:
-        worst = max(run.steps, key=lambda s: s.rows_before - s.rows_after, default=None)
+        removed = [
+            (s, s.rows_before - s.rows_after) for s in run.steps if s.rows_after < s.rows_before
+        ]
         culprit = (
-            f" Step {worst.index} ({worst.op}) alone removed {worst.rows_before - worst.rows_after}"
-            ": check its parameters."
-            if worst and worst.rows_before > worst.rows_after
+            " Removed by step: "
+            + ", ".join(f"step {s.index} ({s.op}) {n}" for s, n in removed)
+            + ". Check the parameters of the biggest ones, or drop the least important step."
+            if removed
             else ""
         )
         run.errors.append(

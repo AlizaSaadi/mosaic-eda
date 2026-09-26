@@ -27,6 +27,7 @@ from mosaic.crews.audio.crew import AudioCrew
 from mosaic.crews.image.crew import ImageCrew
 from mosaic.crews.table.crew import TableCrew
 from mosaic.crews.text.crew import TextCrew
+from mosaic.crews.video.crew import VideoCrew
 from mosaic.flow.runtime import JobRuntime
 from mosaic.images import pipeline_helpers as image_helpers
 from mosaic.images.ops import IMAGE_OPS, image_namespace
@@ -51,6 +52,9 @@ from mosaic.text import pipeline_helpers as text_helpers
 from mosaic.text.ops import TEXT_OPS, text_namespace
 from mosaic.text.profile import TextProfile, profile_text, snippet
 from mosaic.text.review import pick_documents, reading_review
+from mosaic.video import pipeline_helpers as video_helpers
+from mosaic.video.ops import VIDEO_OPS, video_namespace
+from mosaic.video.profile import VideoProfile, profile_video, scene_spans
 
 MAX_CLASS_LOSS = 0.5
 MAX_DOCUMENTS = 2000  # documents analyzed when one file is split into many
@@ -812,6 +816,237 @@ class TextAdapter(Adapter):
         return []
 
 
+# ---------------------------------------------------------------- video
+
+
+def video_pipeline_script(plan: CleaningPlan, run: PlanRun, source: str) -> str:
+    return file_pipeline_script(
+        plan,
+        run,
+        source,
+        kind="videos",
+        helpers=video_helpers,
+        export_call="export_video",
+        imports="import hashlib\nimport json\nimport re\nimport shutil\nimport subprocess\n"
+        "import sys\nimport tempfile\nfrom itertools import pairwise\nfrom pathlib import Path\n\n"
+        "import numpy as np\nimport pandas as pd\nfrom PIL import Image",
+        rerun="Rerun it on the full data (a folder of videos, class = first folder level, or\n"
+        "one video file):\n    python cleaning_pipeline.py path/to/videos cleaned_videos",
+    )
+
+
+class VideoAdapter(Adapter):
+    modality = "video"
+    unit = "videos"
+    crew_cls = VideoCrew
+
+    def load(self, manifest: FileManifest) -> str:
+        files = manifest.files_of(Modality.VIDEO)
+        self.root = Path(manifest.root)
+        self.class_counts = dict(Counter(f.group for f in files))
+        self.total = len(files)
+        sample = stratified_sample(files, Modality.VIDEO, self.rt.settings.max_sampled_files)
+        if sample.is_sample:
+            self.notes.append(
+                f"Analyzed a stratified sample of {len(sample.files)} of "
+                f"{self.total} videos (by folder)."
+            )
+        tops = {f.path.split("/")[0] for f in files}
+        if len(tops) == 1 and all(f.path.count("/") >= 2 for f in files):
+            wrapper = tops.pop()
+            self.root = self.root / wrapper
+            rel = [(f.path[len(wrapper) + 1 :], f.group) for f in sample.files]
+        else:
+            rel = [(f.path, f.group) for f in sample.files]
+        self.df = video_helpers.build_table(
+            self.root, rel, frames_dir=self.rt.ws.work / "keyframes"
+        )
+        if self.df["corrupt"].all():
+            raise ValueError(
+                "None of the videos could be decoded. Check that they're valid MP4, MOV, "
+                "WebM, or MKV files."
+            )
+        seconds = float(self.df["duration_s"].fillna(0).sum())
+        labels = len([c for c in self.class_counts if c])
+        return f"{self.total} videos ({seconds:.0f} seconds)" + (
+            f" in {labels} classes" if labels else ""
+        )
+
+    def _transcribe_scenes(self):
+        """Each scene's audio is transcribed on its own, so the timeline knows what was
+        said in which scene without needing word timestamps."""
+        reporter = self.rt.reporter
+        ok = self.df[~self.df["corrupt"] & self.df["has_audio"].fillna(False).astype(bool)]
+        if ok.empty:
+            return None
+        reporter.emit("step", "Transcribing speech per scene", "Whisper, with voice detection")
+        clips = []
+        for row in ok.to_dict("records"):
+            audio = video_helpers.decode_audio(self.root / row["path"])
+            if audio is None:
+                continue
+            for n, (start, end) in enumerate(scene_spans(row), 1):
+                part = audio[int(start * 16000) : int(end * 16000)]
+                if len(part) >= 1600:  # at least 0.1 seconds
+                    clips.append((f"{row['path']}#s{n}", part))
+        engine = self.rt.transcriber
+        try:
+            result = transcribe_clips(
+                clips,
+                self.rt.settings.max_transcribe_seconds,
+                engine=engine[0] if engine else None,
+                engine_name=engine[1] if engine else "",
+            )
+        except Exception as exc:  # the rest of the analysis still works
+            self.notes.append("Transcription couldn't run, so the timeline has no speech.")
+            reporter.emit("info", "Transcription skipped", str(exc)[:300], "warning")
+            return None
+        reporter.emit(
+            "step", "Transcription done", f"{result.engine}: {result.seconds} s of audio", "done"
+        )
+        if result.skipped_budget:
+            self.notes.append(
+                f"{len(result.skipped_budget)} scenes weren't transcribed because of the time "
+                "limit."
+            )
+        return result
+
+    def profile_raw(self, goal: str) -> tuple[float, str | None, int]:
+        transcripts = self._transcribe_scenes()
+        self.raw: VideoProfile = profile_video(
+            self.df,
+            self.rt.store,
+            work=self.rt.ws.work,
+            class_counts=self.class_counts,
+            total_videos=self.total,
+            transcripts=transcripts,
+        )
+        self.chart_ids = list(self.raw.chart_ids)
+        if len([c for c in self.class_counts if c]) >= 2:
+            self._vision()
+        return self.raw.quality, None, len(self.df)
+
+    def _vision(self) -> None:
+        reporter = self.rt.reporter
+        reporter.emit("step", "Vision review of the keyframes", "one request for all classes")
+        try:
+            vision_id = vision_review(
+                self.rt.store,
+                self.raw.sheet_ids,
+                tracker=self.rt.tracker,
+                route=self.rt.routes["default"],
+                api_key=self.rt.api_key,
+                on_event=self.rt._on_call,
+                client_factory=self.rt.client_factory,
+                kind="video",
+            )
+        except Exception as exc:
+            self.notes.append("The vision review couldn't run, so mislabels weren't checked.")
+            reporter.emit("info", "Vision review skipped", str(exc)[:300], "warning")
+            return
+        if vision_id:
+            self.raw.artifact_ids.append(vision_id)
+            flagged = self.rt.store.get(vision_id).data["suspected_total"]
+            reporter.emit("step", "Vision review done", f"{flagged} suspected mislabels", "done")
+
+    @property
+    def guard_df(self) -> pd.DataFrame:
+        return self.df
+
+    @property
+    def columns(self) -> list[str]:
+        return []
+
+    def execute(self, plan: CleaningPlan) -> PlanRun:
+        return execute_plan(
+            plan,
+            self.df,
+            self.rt.store,
+            catalog=VIDEO_OPS,
+            namespace=video_namespace(),
+            unit="videos",
+        )
+
+    def post_checks(self, run: PlanRun) -> list[str]:
+        before = self.df.groupby("class").size()
+        after = run.df.groupby("class").size().reindex(before.index, fill_value=0)
+        return [
+            f"The plan removes {1 - after[c] / before[c]:.0%} of class '{c}' ({before[c]} -> "
+            f"{after[c]}). Use a gentler threshold or flag instead of dropping."
+            for c in before.index
+            if c and before[c] >= 5 and after[c] < before[c] * (1 - MAX_CLASS_LOSS)
+        ]
+
+    def catalog(self) -> str:
+        return catalog_text(VIDEO_OPS)
+
+    def conservative_plan(self) -> CleaningPlan:
+        return CleaningPlan(
+            summary="Safe-only fallback plan: remove undecodable files and fix rotation. "
+            "Nothing else is removed.",
+            ops=[
+                CleaningOp(
+                    op="remove_corrupt",
+                    rationale="Files that can't be decoded.",
+                    evidence=[self.raw.artifact_ids[0]],
+                ),
+                CleaningOp(op="fix_rotation", rationale="Play upright everywhere."),
+            ],
+        )
+
+    def apply(self, plan: CleaningPlan, run: PlanRun) -> tuple[dict[str, str], float, int]:
+        out = self.rt.ws.out
+        folder = self.rt.ws.work / "cleaned_videos"
+        video_helpers.export_video(run.df, self.root, folder)
+        shutil.copy(folder / "video_manifest.csv", out / "video_manifest.csv")
+        archive = shutil.make_archive(str(out / "cleaned_videos"), "zip", folder)
+        (out / "cleaning_pipeline.py").write_text(
+            video_pipeline_script(plan, run, self.rt.ws.input.name), encoding="utf-8"
+        )
+        kept = run.df.groupby("class").size().to_dict()
+        self.clean = profile_video(
+            run.df,
+            self.rt.store,
+            work=self.rt.ws.work,
+            class_counts=kept,
+            total_videos=len(run.df),
+            stage="clean",
+        )
+        self.chart_ids += self.clean.chart_ids[:1]
+        outputs = {
+            "cleaned": archive,
+            "manifest": str(out / "video_manifest.csv"),
+            "pipeline": str(out / "cleaning_pipeline.py"),
+        }
+        return outputs, self.clean.quality, len(run.df)
+
+    def report_extras(self) -> dict[str, Any]:
+        store = self.rt.store
+
+        def first(prefix: str) -> dict | None:
+            return next((a.data for a in store.all("profile") if a.id == f"{prefix}_001"), None)
+
+        sheets = [
+            {
+                "class": store.get(i).data["class"],
+                "b64": base64.b64encode(Path(store.get(i).data["path"]).read_bytes()).decode(),
+            }
+            for i in self.raw.sheet_ids
+        ]
+        return {
+            "balance": first("vid_balance"),
+            "timeline": first("vid_timeline"),
+            "sheets": sheets,
+        }
+
+    def gallery(self) -> list[tuple[str, str]]:
+        store = self.rt.store
+        return [
+            (store.get(i).data["path"], f"Keyframes: {store.get(i).data['class']}")
+            for i in self.raw.sheet_ids
+        ]
+
+
 class LogAdapter(TableAdapter):
     """Logs are parsed into a table (one row per record) and analyzed by the Table crew."""
 
@@ -840,5 +1075,6 @@ def make_adapter(manifest: FileManifest, rt: JobRuntime) -> Adapter | None:
         Modality.TABLE: TableAdapter,
         Modality.IMAGE: ImageAdapter,
         Modality.AUDIO: AudioAdapter,
+        Modality.VIDEO: VideoAdapter,
     }
     return adapters.get(manifest.dominant, lambda _rt: None)(rt)

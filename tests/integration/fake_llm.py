@@ -38,7 +38,7 @@ class ScriptedLLM(BaseLLM):
             answer = self._review()
         elif "Allowed operations" in text:
             answer = self._plan(text)
-        elif "Write 5-8 findings" in text:
+        elif "Write 5-8 findings" in text or "Write 3-6 findings" in text:
             answer = self._findings(text)
         elif "Write the report summary" in text:
             answer = {
@@ -504,6 +504,89 @@ class FakeReadClient:
         self.models = FakeReadModels()
 
 
+# ---- video datasets ----
+
+
+class VideoScriptedLLM(ScriptedLLM):
+    """Answers the video prompts; review and revision reuse the table behavior."""
+
+    def _triage(self) -> dict:
+        return {
+            "dataset_description": "Pattern clips labeled fractals, patterns, and cells.",
+            "focus_areas": ["unusable footage", "duplicates", "audio"],
+            "target_column": None,
+        }
+
+    def _plan(self, text: str) -> dict:
+        evidence = {
+            "remove_corrupt": "vid_overview_001",
+            "drop_exact_duplicates": "vid_dupes_001",
+            "drop_near_duplicates": "vid_dupes_001",
+            "drop_too_short": "vid_quality_001",
+            "drop_black": "vid_quality_001",
+            "drop_frozen": "vid_quality_001",
+        }
+        ops = [
+            {"op": op, "rationale": "Found by code.", "evidence": [e]} for op, e in evidence.items()
+        ]
+        ops += [
+            {
+                "op": "flag_suspected_mislabels",
+                "params": {"files": ["patterns/pattern_09.mp4"]},
+                "rationale": "Looks like a fractal.",
+                "evidence": ["vid_quality_001"],
+            },
+            {"op": "fix_rotation", "rationale": "One sideways video."},
+            {"op": "extract_audio", "rationale": "For audio models."},
+        ]
+        return {"summary": "Remove unusable and duplicate footage.", "ops": ops}
+
+    def _findings(self, text: str) -> dict:
+        ratio = _num(r"largest/smallest ratio ([\d.]+)", text)
+        silent_tracks = _num(r"silent: (\d+) \(silent_audio\)", text)
+        no_audio = _num(r"(\d+) without \(without_audio\)", text)
+        first = not self._state.get("findings_attempted")
+        self._state["findings_attempted"] = True
+        claimed = round(ratio + 2, 2) if first else round(ratio, 2)
+        return {
+            "findings": [
+                {
+                    "title": "Classes are uneven",
+                    "severity": "warning",
+                    "statement": f"The largest class is {claimed} times the smallest.",
+                    "evidence": ["vid_balance_001"],
+                    "claimed_metrics": [{"key": "imbalance_ratio", "value": claimed}],
+                },
+                {
+                    "title": "Videos without sound",
+                    "severity": "warning",
+                    "statement": f"{int(no_audio)} videos have no audio track.",
+                    "evidence": ["vid_overview_001"],
+                    "claimed_metrics": [{"key": "without_audio", "value": no_audio}],
+                },
+                {
+                    "title": "Silent audio tracks",
+                    "severity": "info",
+                    "statement": f"{int(silent_tracks)} videos have a silent audio track.",
+                    "evidence": ["vid_quality_001"],
+                    "claimed_metrics": [{"key": "silent_audio", "value": silent_tracks}],
+                },
+            ]
+        }
+
+
+def fake_scene_whisper():
+    """Hears a narration in any scene with sound, and nothing in silent ones."""
+
+    def engine(clips):
+        return [
+            ("This clip shows patterns.", "en") if float(abs(c).max()) > 0.02 else ("", "")
+            for c in clips
+        ]
+
+    return engine, "fake-whisper"
+
+
 def fake_whisper(expected: dict):
     """Returns the known transcript for each clip, in the order the adapter sends them."""
     order = sorted(expected)
@@ -512,3 +595,74 @@ def fake_whisper(expected: dict):
         return [(expected[p], "en") for p in order[: len(clips)]]
 
     return engine, "fake-whisper"
+
+
+# ---- mixed datasets (group mode) ----
+
+
+class GroupScriptedLLM(ScriptedLLM):
+    """One model for every crew in a group run: the prompt says which crew is asking."""
+
+    def _kind(self, text: str) -> str:
+        if "Mixed dataset" in text:
+            return "mixed"
+        return "image" if "image dataset" in text.lower() else "table"
+
+    def _triage(self) -> dict:
+        return {
+            "dataset_description": "Part of a shapes survey.",
+            "focus_areas": ["quality"],
+            "target_column": None,
+        }
+
+    def _plan(self, text: str) -> dict:
+        if self._kind(text) == "image":
+            ops = [
+                {"op": "remove_corrupt", "rationale": "r", "evidence": ["img_overview_001"]},
+                {"op": "convert_to_rgb", "rationale": "Consistent mode."},
+            ]
+        else:
+            ops = [{"op": "standardize_null_tokens", "rationale": "N/A tokens."}]
+        return {"summary": "Minimal cleaning.", "ops": ops}
+
+    def _findings(self, text: str) -> dict:
+        kind = self._kind(text)
+        if kind == "mixed":
+            missing = _num(r"(\d+) rows point to files that aren't in the dataset", text)
+            orphans = _num(r"(\d+) of \d+ files have no row", text)
+            disagree = _num(r"for (\d+) rows \(label_disagreements\)", text)
+            first = not self._state.get("cross_attempted")
+            self._state["cross_attempted"] = True
+            claimed = missing + 4 if first else missing  # wrong on the first try
+            cite = {"evidence": ["mix_links_001"], "severity": "warning"}
+            return {
+                "findings": [
+                    {
+                        **cite,
+                        "title": "Rows point to missing images",
+                        "statement": f"{int(claimed)} rows name images that aren't there.",
+                        "claimed_metrics": [{"key": "rows_missing_file", "value": claimed}],
+                    },
+                    {
+                        **cite,
+                        "title": "Images without annotations",
+                        "statement": f"{int(orphans)} images have no row.",
+                        "claimed_metrics": [{"key": "files_unreferenced", "value": orphans}],
+                    },
+                    {
+                        **cite,
+                        "title": "Labels disagree with folders",
+                        "statement": f"{int(disagree)} rows disagree with the image folder.",
+                        "claimed_metrics": [{"key": "label_disagreements", "value": disagree}],
+                    },
+                ]
+            }
+        prefix = "img" if kind == "image" else "tbl"
+        base = {"severity": "info", "evidence": [f"{prefix}_overview_001"], "claimed_metrics": []}
+        return {
+            "findings": [
+                {**base, "title": "Profiled", "statement": "The data was profiled."},
+                {**base, "title": "Cleaned", "statement": "The data was cleaned."},
+                {**base, "title": "Checked", "statement": "The data was checked."},
+            ]
+        }

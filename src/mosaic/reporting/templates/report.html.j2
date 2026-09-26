@@ -60,7 +60,7 @@ ul{padding-left:20px} footer{margin-top:40px;color:var(--muted);font-size:13px}
   {% if triage %}<p><b>What this dataset is:</b> {{ triage.dataset_description }}{% if target %} Target column: <code>{{ target }}</code>.{% endif %}</p>{% endif %}
 </header>
 
-<h2>Findings</h2>
+<h2>{{ "Cross-type findings" if extras.group else "Findings" }}</h2>
 {% for f in findings %}
 <div class="finding">
   <h3><span class="chip {{ f.severity }}">{{ f.severity|capitalize }}</span>{{ f.title }}</h3>
@@ -69,6 +69,30 @@ ul{padding-left:20px} footer{margin-top:40px;color:var(--muted);font-size:13px}
   <div class="ev">Evidence: {{ f.evidence|join(", ") }}</div>
 </div>
 {% else %}<p>No findings were produced.</p>{% endfor %}
+
+{% if extras.group %}
+<h2>Each data type</h2>
+<p class="ev">Each type was profiled, cleaned, analyzed, and reviewed by its own crew. Full per-type reports, cleaned data, and pipeline scripts are in <code>cleaned_by_type.zip</code>.</p>
+{% for p in extras.group %}
+<div class="finding">
+  <h3>{{ p.modality|capitalize }} · {{ p.files }} file(s){% if p.status == "done" %} · quality {{ p.quality_before }} → {{ p.quality_after }} · {{ p.unit }} {{ p.items_before }} → {{ p.items_after }}{% endif %}</h3>
+  {% if p.status == "done" %}
+  {% if p.headline %}<div><b>{{ p.headline }}</b></div>{% endif %}
+  <ul>{% for f in p.finding_list %}<li><span class="chip {{ f.severity }}">{{ f.severity|capitalize }}</span>{{ f.title }}: {{ f.statement }}</li>{% endfor %}</ul>
+  {% else %}<div>Not analyzed: {{ p.error }}</div>{% endif %}
+</div>
+{% endfor %}
+{% if extras.links %}{% set l = extras.links %}
+<h2>Table-to-file links</h2>
+<p class="ev"><code>{{ l.table }}</code>, column <code>{{ l.file_column }}</code>: {{ l.rows_matched }} of {{ l.rows }} rows match a file; {{ l.rows_missing_file }} point to missing files; {{ l.files_unreferenced }} of {{ l.files }} files have no row{% if l.label_column %}; column <code>{{ l.label_column }}</code> disagrees with the folder for {{ l.label_disagreements }} rows{% endif %}.</p>
+<div class="tbl"><table>
+<tr><th>Problem</th><th>Examples</th></tr>
+{% if l.missing_examples %}<tr><td>Rows naming missing files</td><td>{{ l.missing_examples|join(", ") }}</td></tr>{% endif %}
+{% if l.unreferenced_examples %}<tr><td>Files with no row</td><td>{{ l.unreferenced_examples|join(", ") }}</td></tr>{% endif %}
+{% for d in l.disagreement_examples %}<tr><td>Label disagrees (row {{ d.row }})</td><td><code>{{ d.file }}</code>: table says "{{ d.table_label }}", folder is "{{ d.folder }}"</td></tr>{% endfor %}
+</table></div>
+{% endif %}
+{% endif %}
 
 {% if narrative and narrative.next_steps %}
 <h2>Next steps</h2>
@@ -196,6 +220,15 @@ ul{padding-left:20px} footer{margin-top:40px;color:var(--muted);font-size:13px}
 </table></div>
 {% endif %}
 
+{% if extras.timeline and extras.timeline.videos %}
+<h2>Timeline: scenes and speech</h2>
+<p class="ev">Scene cuts from ffmpeg; each scene's audio transcribed on its own ({{ extras.timeline.engine or "no transcription" }}). {{ extras.timeline.scenes }} scenes, {{ extras.timeline.scenes_with_speech }} with speech.</p>
+<div class="tbl"><table>
+<tr><th>Video</th><th>Scene</th><th>Seconds</th><th>Words</th><th>Said</th></tr>
+{% for path, scenes in extras.timeline.videos.items() %}{% for s in scenes %}<tr><td>{% if loop.first %}<code>{{ path }}</code>{% endif %}</td><td>{{ s.scene }}</td><td>{{ s.start }}–{{ s.end }}</td><td>{{ s.words }}</td><td>{{ s.said }}</td></tr>{% endfor %}{% endfor %}
+</table></div>
+{% endif %}
+
 {% if extras.spectrograms %}
 <h2>Spectrograms</h2>
 <p class="ev">Time runs left to right, pitch bottom to top, darker is louder.</p>
@@ -203,7 +236,7 @@ ul{padding-left:20px} footer{margin-top:40px;color:var(--muted);font-size:13px}
 {% endif %}
 
 {% if extras.sheets %}
-<h2>Contact sheets reviewed by the vision model</h2>
+<h2>{{ "Keyframe sheets" if extras.timeline else "Contact sheets" }} reviewed by the vision model</h2>
 <p class="ev">Numbered thumbnails per class. The vision review's suspicions are AI observations, confirmed by code where possible.</p>
 {% for sheet in extras.sheets %}<figure class="sheet"><img src="data:image/png;base64,{{ sheet.b64 }}" alt="Contact sheet for {{ sheet.class }}"><figcaption>{{ sheet.class }}</figcaption></figure>{% endfor %}
 {% endif %}

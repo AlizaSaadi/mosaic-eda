@@ -18,6 +18,14 @@ from mosaic.llm.direct import OnEvent, generate_structured
 from mosaic.llm.quota import PoolRule, QuotaTracker
 
 MAX_SHEETS = 6
+KINDS = {  # (dataset description, what each thumbnail is)
+    "image": ("an image classification dataset", ""),
+    "video": (
+        "a video classification dataset",
+        " (each is one frame from the middle of a video)",
+    ),
+}
+PREFIX = {"image": "img_vision", "video": "vid_vision"}
 
 
 class SheetReview(BaseModel):
@@ -34,8 +42,9 @@ class VisionReport(BaseModel):
     overall: str = Field(description="One or two sentences on the dataset as a whole")
 
 
-PROMPT = """You are checking an image classification dataset. Each attached image is a
-contact sheet: a grid of numbered thumbnails from one class (the class is the folder name).
+PROMPT = """You are checking {what}. Each attached image is a
+contact sheet: a grid of numbered thumbnails{frames} from one class (the class is the folder
+name).
 
 {listing}
 
@@ -54,6 +63,7 @@ def vision_review(
     api_key: str,
     on_event: OnEvent | None = None,
     client_factory: Any = None,
+    kind: str = "image",
 ) -> str | None:
     """Review the contact sheets and save an img_vision artifact. Returns its ID."""
     sheets = [store.get(i).data for i in sheet_ids[:MAX_SHEETS]]
@@ -63,7 +73,8 @@ def vision_review(
         f"Sheet {n}: class '{s['class']}', images 1-{len(s['index'])}"
         for n, s in enumerate(sheets, 1)
     )
-    contents: list[Any] = [PROMPT.format(listing=listing)]
+    what, frames = KINDS[kind]
+    contents: list[Any] = [PROMPT.format(listing=listing, what=what, frames=frames)]
     for s in sheets:
         contents.append(
             types.Part.from_bytes(data=Path(s["path"]).read_bytes(), mime_type="image/png")
@@ -110,7 +121,7 @@ def vision_review(
         for c, v in classes.items()
     )
     artifact = store.add(
-        "img_vision",
+        PREFIX[kind],
         "profile",
         "vision_review",
         f"Vision review by {model} (an AI observation, not a measurement; confirm before "

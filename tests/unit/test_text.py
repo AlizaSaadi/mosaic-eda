@@ -169,7 +169,7 @@ def test_filter_language_takes_codes_or_names_and_the_dry_run_names_the_culprit(
         ],
     )
     run = execute_plan(plan, df, catalog=TEXT_OPS, namespace=text_namespace(), unit="documents")
-    assert "Step 1 (filter_language) alone removed 6" in run.errors[0]
+    assert "Removed by step: step 1 (filter_language) 6" in run.errors[0]
 
 
 def test_numbered_evidence_keys_match_the_numbers_in_the_text(tmp_path):

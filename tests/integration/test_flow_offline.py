@@ -62,13 +62,13 @@ def test_fact_check_rejects_then_accepts(run_flow):
     assert rt.reporter.counters["facts_verified"] == 2
 
 
-def test_unsupported_input_is_reported(run_flow, tmp_path):
+def test_undecodable_video_fails_with_a_clear_message(run_flow, tmp_path):
     mp4 = tmp_path / "clip.mp4"
     mp4.write_bytes(b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" + b"\x00" * 64)
     state, _, shared = run_flow(mp4)
-    assert state.status == "unsupported"
-    assert "coming next" in state.error
-    assert not shared.get("calls")  # no model calls for unsupported input
+    assert state.status == "failed"
+    assert "None of the videos could be decoded" in state.error
+    assert not shared.get("calls")  # no model calls for unusable input
 
 
 def test_undecodable_audio_fails_with_a_clear_message(run_flow, tmp_path):

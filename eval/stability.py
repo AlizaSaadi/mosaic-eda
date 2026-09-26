@@ -28,6 +28,8 @@ EXAMPLES = {
     "image": (ROOT / "examples/datasets/shapes_dataset.zip", "Train an image classifier"),
     "audio": (ROOT / "examples/datasets/speech_commands.zip", "Train a keyword-spotting model"),
     "text": (ROOT / "examples/datasets/support_tickets.zip", "Train a support ticket classifier"),
+    "video": (ROOT / "examples/datasets/pattern_clips.zip", "Train a video classifier"),
+    "mixed": (ROOT / "examples/datasets/shapes_survey.zip", "Train an image classifier"),
 }
 
 
@@ -43,7 +45,7 @@ def run_once(source: Path, goal: str, tracker) -> dict:
     ACTIVE.reporter = rt.reporter
     flow = EDAFlow.for_job(rt)
     start = time.time()
-    flow.kickoff(inputs={"source": str(source), "goal": goal})
+    flow.kickoff(inputs={"source": str(source), "goal": goal, "mixed_choice": "group"})
     events = rt.reporter.events()
     rejections = [(e.title, e.detail) for e in events if e.kind == "guardrail"]
     return {

@@ -1,10 +1,14 @@
 """The MOSAIC Flow: code routes the job, agents reason inside their own steps.
 
-Tables, text, images, and audio, end to end (a data-type adapter supplies what differs):
-ingest -> route -> profile (code) -> triage (agent) -> plan cleaning (agent; dry-run and
-distribution guardrails; safe-only fallback) -> apply cleaning + re-profile (code) ->
-findings (agent; fact-check guardrail) -> review (agent) -> [revise -> review] at most
-twice -> summary (agent) -> report (code).
+Tables, text, images, audio, and video, end to end (a data-type adapter supplies what
+differs): ingest -> route -> profile (code) -> triage (agent) -> plan cleaning (agent;
+dry-run and distribution guardrails; safe-only fallback) -> apply cleaning + re-profile
+(code) -> findings (agent; fact-check guardrail) -> review (agent) -> [revise -> review] at
+most twice -> summary (agent) -> report (code).
+
+Mixed datasets pause for the user's choice. In group mode each data type runs this whole
+Flow on its own (two at a time), code links the types, and the Cross-Type Synthesizer's
+findings go through the same fact check, review, and revision loop.
 """
 
 from __future__ import annotations
@@ -18,10 +22,12 @@ from crewai.flow.flow import Flow, listen, or_, router, start
 from crewai.flow.runtime import FlowState
 from pydantic import Field, PrivateAttr
 
+from mosaic.crews.mixed.crew import MixedCrew
 from mosaic.flow.adapters import Adapter, make_adapter
+from mosaic.flow.group import bundle, group_chart, record_group, run_parts
 from mosaic.flow.runtime import JobRuntime
 from mosaic.guardrails.task_guardrails import GuardContext, parse_output
-from mosaic.ingest.models import IngestError
+from mosaic.ingest.models import ANALYZABLE, FileManifest, IngestError
 from mosaic.ingest.service import ingest
 from mosaic.llm.quota import JobTimeout, QuotaExhausted
 from mosaic.models.agent_outputs import (
@@ -59,6 +65,10 @@ class EDAState(FlowState):
     review_history: list[dict[str, Any]] = Field(default_factory=list)
     revision_round: int = 0
     revise_failed: bool = False
+    mixed_choice: str = "ask"  # ask | group | dominant (for datasets with several types)
+    mixed_counts: dict[str, int] = Field(default_factory=dict)
+    group: bool = False
+    parts: list[dict[str, Any]] = Field(default_factory=list)
 
 
 MAX_REVISIONS = 2
@@ -71,6 +81,11 @@ class EDAFlow(Flow[EDAState]):
     _adapter: Adapter | None = PrivateAttr(default=None)
     _guard: GuardContext | None = PrivateAttr(default=None)
     _crew: Any = PrivateAttr(default=None)
+    _preset_manifest: FileManifest | None = PrivateAttr(default=None)  # group-mode parts
+    _manifest: FileManifest | None = PrivateAttr(default=None)
+    _label: str = PrivateAttr(default="")  # a part's data type, shown in the feed
+    _part_flows: list[Any] = PrivateAttr(default_factory=list)
+    _group_charts: list[str] = PrivateAttr(default_factory=list)
 
     @classmethod
     def for_job(cls, runtime: JobRuntime) -> EDAFlow:
@@ -82,7 +97,8 @@ class EDAFlow(Flow[EDAState]):
     # ---- helpers ----
 
     def _step(self, title: str, detail: str = "", status: str = "running") -> None:
-        self._rt.reporter.emit("step", title, detail, status)
+        prefix = f"[{self._label}] " if self._label else ""
+        self._rt.reporter.emit("step", prefix + title, detail, status)
 
     def _ok(self) -> bool:
         return self.state.status == "running"
@@ -156,18 +172,23 @@ class EDAFlow(Flow[EDAState]):
         self.state.status = "running"
         self._step("Reading your data")
         try:
-            manifest = ingest(self.state.source, self._rt.ws, self._rt.settings)
+            manifest = self._preset_manifest or ingest(
+                self.state.source, self._rt.ws, self._rt.settings
+            )
         except IngestError as exc:
             self._fail(exc.message)
             return
         self.state.source_name = manifest.source_name
         self.state.dominant = manifest.dominant.value if manifest.dominant else ""
+        if manifest.is_mixed and self.state.mixed_choice != "dominant":
+            self._mixed(manifest)
+            return
         adapter = make_adapter(manifest, self._rt)
         if adapter is None:
             found = ", ".join(f"{n} {m.value}" for m, n in manifest.counts.items())
             self._fail(
-                f"Found {found}. This version analyzes tables, text, images, and audio; video "
-                "is coming next.",
+                f"Found {found}, which this version can't analyze. It handles tables, text, "
+                "logs, images, audio, and video.",
                 "unsupported",
             )
             return
@@ -176,8 +197,8 @@ class EDAFlow(Flow[EDAState]):
                 f"{n} {m.value}" for m, n in manifest.counts.items() if m != manifest.dominant
             )
             self.state.notes.append(
-                f"The input also contains {others}. This version analyzes the main data type "
-                f"({manifest.dominant.value}) only."
+                f"The input also contains {others}. As chosen, only the main data type "
+                f"({manifest.dominant.value}) was analyzed."
             )
         self._adapter = adapter
         self.state.modality, self.state.unit = adapter.modality, adapter.unit
@@ -192,9 +213,68 @@ class EDAFlow(Flow[EDAState]):
         self._step("Data loaded", described, "done")
         self._timed("ingest", t0)
 
+    def _mixed(self, manifest: FileManifest) -> None:
+        """Several data types: pause for the user's choice, or set up group mode."""
+        counts = {m.value: n for m, n in manifest.counts.items() if m in ANALYZABLE}
+        self.state.mixed_counts = counts
+        listing = ", ".join(f"{n} {m}" for m, n in counts.items())
+        if self.state.mixed_choice != "group":
+            self.state.status = "needs_choice"
+            self._step("Several data types found: choose how to analyze them", listing, "done")
+            return
+        self.state.group = True
+        self._manifest = manifest
+        self.state.modality, self.state.unit = "mixed", "items"
+        self._crew = MixedCrew(
+            self._rt.llm_for, self._guard, retries=2, n_findings=lambda: len(self.state.findings)
+        )
+        self._step("Several data types found: analyzing each, then linking them", listing, "done")
+
     @router(ingest_input)
     def route(self) -> str:
-        return "analyze_data" if self._ok() else "stop"
+        if not self._ok():
+            return "stop"
+        return "group" if self.state.group else "analyze_data"
+
+    @listen("group")
+    def run_group(self) -> None:
+        """Each type runs this Flow on its own; then code links them and the Cross-Type
+        Synthesizer writes findings, which the review loop checks like any others."""
+        t0 = time.time()
+        flows = run_parts(type(self), self._rt, self._manifest, self.state.source, self.state.goal)
+        self._part_flows = flows
+        parts = record_group(self._rt.store, self._manifest, flows)
+        self.state.parts = parts
+        done = [p for p in parts if p["status"] == "done"]
+        if not done:
+            self._fail(
+                "None of the data types could be analyzed: "
+                + "; ".join(f"{p['modality']}: {p['error']}" for p in parts)
+            )
+            return
+        self.state.quality_raw = round(sum(p["quality_before"] for p in done) / len(done), 1)
+        self.state.quality_clean = round(sum(p["quality_after"] for p in done) / len(done), 1)
+        self.state.rows_before = sum(p["items_before"] for p in done)
+        self.state.rows_after = sum(p["items_after"] for p in done)
+        self._group_charts = [group_chart(self._rt.store, parts)]
+        links = [a for a in self._rt.store.all("profile") if a.id.startswith("mix_links")]
+        self._step(
+            "Linked the data types",
+            links[0].summary if links else "No table describes the other files.",
+            "done",
+        )
+        self._timed("parts", t0)
+        part_findings = "\n".join(
+            f"- {p['modality']}: " + "; ".join(f["title"] for f in p["finding_list"]) for p in done
+        )
+        self._findings_stage(
+            {
+                "source_name": self.state.source_name,
+                "goal": self.state.goal or "(none given)",
+                "part_findings": part_findings,
+                "evidence_brief": self._rt.store.brief(("profile",)),
+            }
+        )
 
     @listen("analyze_data")
     def profile_raw(self) -> None:
@@ -335,6 +415,14 @@ class EDAFlow(Flow[EDAState]):
         )
 
     def _cleaning_log(self) -> str:
+        if self.state.group:
+            return "\n".join(
+                f"{p['modality']}: cleaned by its own crew, {p['unit']} {p['items_before']} -> "
+                f"{p['items_after']}, quality {p['quality_before']} -> {p['quality_after']}"
+                if p["status"] == "done"
+                else f"{p['modality']}: not analyzed ({p['error'][:100]})"
+                for p in self.state.parts
+            )
         run = self._guard.plan_run
         return "\n".join(
             f"{s.index}. {s.op} on {s.columns or 'all'} [{s.risk}]: {self.state.unit} "
@@ -348,8 +436,7 @@ class EDAFlow(Flow[EDAState]):
         if not self._ok():
             return
         t0 = time.time()
-        result = self._run_stage(
-            "analyze",
+        self._findings_stage(
             {
                 "source_name": self.state.source_name,
                 "goal": self.state.goal or "(none given)",
@@ -357,9 +444,13 @@ class EDAFlow(Flow[EDAState]):
                 "target": self.state.target or "none",
                 "evidence_brief": self._rt.store.brief(("profile",)),
                 "cleaning_log": self._cleaning_log(),
-            },
-            fatal=False,
+            }
         )
+        self._timed("analyze", t0)
+
+    def _findings_stage(self, inputs: dict[str, Any]) -> None:
+        """The analyst writes findings; if its retries run out, keep only verified ones."""
+        result = self._run_stage("analyze", inputs, fatal=False)
         if result is None:
             if not self._ok():
                 return  # quota ran out: that stays fatal
@@ -381,7 +472,6 @@ class EDAFlow(Flow[EDAState]):
             return
         report = parse_output(result.tasks_output[0], FindingsReport)
         self.state.findings = [f.model_dump() for f in report.findings]
-        self._timed("analyze", t0)
 
     # ---- review loop (self-correction level 4) ----
 
@@ -404,7 +494,8 @@ class EDAFlow(Flow[EDAState]):
             "cleaning_log": self._cleaning_log(),
         }
 
-    @listen(or_("analyze", "revised"))  # "revised" is a router label, so the loop can repeat
+    # "revised" is a router label, so the loop can repeat; run_group feeds cross-type findings
+    @listen(or_("analyze", "run_group", "revised"))
     def review(self) -> None:
         if not self._ok() or self.state.revise_failed or not self.state.findings:
             return
@@ -544,10 +635,12 @@ class EDAFlow(Flow[EDAState]):
             self.state.notes.append(
                 "The reviewer noted these weren't covered: " + "; ".join(missed)
             )
-        findings = json.dumps(
-            [{k: f[k] for k in ("title", "statement", "severity")} for f in self.state.findings],
-            indent=1,
-        )
+        shown_findings = [
+            {k: f[k] for k in ("title", "statement", "severity")} for f in self.state.findings
+        ]
+        for p in self.state.parts:  # group mode: each type's own findings too
+            shown_findings += [{**f, "type": p["modality"]} for f in p["finding_list"]]
+        findings = json.dumps(shown_findings, indent=1)
         result = self._run_stage(
             "write_summary",
             {
@@ -581,6 +674,9 @@ class EDAFlow(Flow[EDAState]):
         ]
 
     def _render(self) -> None:
+        if self.state.group:
+            self._render_group()
+            return
         run = self._guard.plan_run
         plan = CleaningPlan.model_validate(self.state.plan)
         out = self._rt.ws.out
@@ -610,5 +706,43 @@ class EDAFlow(Flow[EDAState]):
         )
         self._rt.reporter.write_trace(out / "trace.json")
         self.state.outputs.update(report=str(out / "report.html"), trace=str(out / "trace.json"))
+        self.state.status = "done"
+        self._step("Report ready", "", "done")
+
+    def _render_group(self) -> None:
+        out = self._rt.ws.out
+        charts = [self._rt.store.get(cid).data["figure"] for cid in self._group_charts]
+        links = next(
+            (a.data for a in self._rt.store.all("profile") if a.id == "mix_links_001"), None
+        )
+        render_report(
+            out / "report.html",
+            source_name=self.state.source_name,
+            narrative=self.state.narrative,
+            triage=None,
+            target=None,
+            findings=self.state.findings,
+            quality_raw=self.state.quality_raw,
+            quality_clean=self.state.quality_clean,
+            rows_before=self.state.rows_before,
+            rows_after=self.state.rows_after,
+            facts_verified=self._guard.verified,
+            plan_summary="Each data type was cleaned by its own crew.",
+            steps=[],
+            charts=charts,
+            unit=self.state.unit,
+            modality="mixed",
+            extras={"group": self.state.parts, "links": links},
+            notes=self.state.notes,
+            models=sorted(self._rt.models_used),
+            checks=self._check_timeline(),
+            counters=dict(self._rt.reporter.counters),
+        )
+        self._rt.reporter.write_trace(out / "trace.json")
+        self.state.outputs.update(
+            report=str(out / "report.html"),
+            cleaned=bundle(out, self.state.parts),
+            trace=str(out / "trace.json"),
+        )
         self.state.status = "done"
         self._step("Report ready", "", "done")

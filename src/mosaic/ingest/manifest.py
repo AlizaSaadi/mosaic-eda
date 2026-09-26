@@ -66,6 +66,40 @@ def build_manifest(
         skipped=skipped,
         total_bytes=sum(f.size for f in files),
     )
+    return _summarize(manifest)
+
+
+def subset_manifest(manifest: FileManifest, modality: Modality) -> FileManifest:
+    """The part of a mixed manifest with one data type, for group mode.
+
+    It's re-rooted at the folder all of those files share ("bundle/images/circles/a.png"
+    becomes "circles/a.png" under "bundle/images"), so the part looks exactly like a
+    single-type upload and its first folder level is the label.
+    """
+    files = [f.model_copy() for f in manifest.files if f.modality == modality]
+    dirs = [f.path.split("/")[:-1] for f in files]
+    common: list[str] = []
+    for level in zip(*dirs, strict=False) if dirs else []:
+        if len(set(level)) != 1:
+            break
+        common.append(level[0])
+    prefix = "/".join(common)
+    for f in files:
+        f.path = f.path[len(prefix) + 1 :] if prefix else f.path
+        parts = f.path.split("/")
+        f.group = parts[0] if len(parts) > 1 else ""
+    part = FileManifest(
+        root=str(Path(manifest.root) / prefix) if prefix else manifest.root,
+        source_name=f"{manifest.source_name} ({modality.value})",
+        files=files,
+        total_bytes=sum(f.size for f in files),
+    )
+    return _summarize(part)
+
+
+def _summarize(manifest: FileManifest) -> FileManifest:
+    """Counts, the dominant type, and whether folders look like labels."""
+    files = manifest.files
     counts = Counter(f.modality for f in files)
     manifest.counts = dict(counts)
 
