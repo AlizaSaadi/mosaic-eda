@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MOSAIC EDA report: shapes_survey.zip</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500&family=Inter:wght@400;600&family=JetBrains+Mono&display=swap">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+:root{--bg:#FBF6EE;--surface:#FFFDF8;--border:#E4D5BF;--text:#2B1D14;--muted:#6B5646;
+--accent:#B5471B;--hl:#E8B04A;--crit:#9E2B25;--warn:#8A5A12;--info:#3F6475;--ok:#4F6B2F}
+@media (prefers-color-scheme:dark){:root{--bg:#1C1512;--surface:#261D18;--border:#4A3A2E;--text:#F3E9DC;--muted:#BFAE9C;
+--accent:#E0763A;--hl:#8C5A14;--crit:#E8776C;--warn:#E6B14A;--info:#8DB3C4;--ok:#A3C170}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15.5px/1.6 Inter,system-ui,sans-serif;padding:0 16px 64px}
+main{max-width:980px;margin:0 auto}
+header{padding:36px 0 20px;border-bottom:1px solid var(--border)}
+.eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{font:500 clamp(28px,4vw,40px)/1.15 Fraunces,Georgia,serif;margin:8px 0 10px}
+h2{font:500 24px/1.25 Fraunces,Georgia,serif;margin:36px 0 12px}
+.lede{font-size:17px;color:var(--muted);max-width:70ch}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:18px 0}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.tile .k{font-size:12px;color:var(--muted)} .tile .v{font:600 24px/1.3 Inter,sans-serif;font-variant-numeric:tabular-nums}
+.finding{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:10px 0}
+.finding h3{margin:0 0 4px;font-size:16px}
+.chip{display:inline-block;font-size:12px;font-weight:600;padding:1px 9px;border-radius:999px;border:1px solid currentColor;margin-right:8px}
+.critical{color:var(--crit)} .warning{color:var(--warn)} .info{color:var(--info)}
+.chip.critical{background:var(--crit);color:var(--bg);border-color:var(--crit)}
+.ev{font:12.5px 'JetBrains Mono',monospace;color:var(--muted)}
+.rec{margin-top:6px;font-size:14.5px}
+.tbl{overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--border);vertical-align:top}
+th{font-size:12.5px;color:var(--muted)} tr:last-child td{border-bottom:0}
+code{font:13px 'JetBrains Mono',monospace}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:12px}
+.chart{background:var(--surface);border:1px solid var(--border);border-radius:10px;min-height:340px}
+@media (max-width:520px){.charts{grid-template-columns:1fr}}
+.timeline{list-style:none;padding:0;margin:0}.timeline li{border-left:2px solid var(--border);padding:4px 0 10px 14px}
+.timeline .t{font:12px 'JetBrains Mono',monospace;color:var(--muted);margin-right:6px}
+.timeline pre{white-space:pre-wrap;font:13px/1.5 'JetBrains Mono',monospace;color:var(--muted);margin:4px 0 0}
+.thumbs{display:flex;flex-wrap:wrap;gap:10px}.thumbs figure{margin:0;width:110px}.thumbs img{width:96px;height:96px;object-fit:contain;border:1px solid var(--border);border-radius:6px;background:var(--surface)}
+figcaption{font:11px 'JetBrains Mono',monospace;color:var(--muted);word-break:break-all}
+.sheet{margin:0 0 14px}.sheet img{max-width:100%;border:1px solid var(--border);border-radius:8px}
+ul{padding-left:20px} footer{margin-top:40px;color:var(--muted);font-size:13px}
+</style>
+</head>
+<body><main>
+<header>
+  <div class="eyebrow">MOSAIC EDA report · 27 September 2026</div>
+  <h1>Dataset quality is high at 99.8, but the current configuration is insufficient for classifier training.</h1>
+  <p class="lede">The dataset contains only 38 images, which is too small for effective classifier training. While image quality is high at 99.7, the metadata table suffers from critical mapping issues, including 3 missing files and 3 label disagreements. Furthermore, the provided data is primarily tabular metadata rather than the required image pixel tensors. Although cleaning improved the table quality score from 85.1 to 100.0, the structural mismatches between the annotations and files remain a significant barrier.</p>
+  <div class="tiles">
+    <div class="tile"><div class="k">Data quality before</div><div class="v">92.4/100</div></div>
+    <div class="tile"><div class="k">Data quality after cleaning</div><div class="v">99.8/100</div></div>
+    <div class="tile"><div class="k">Items</div><div class="v">76 → 75</div></div>
+    <div class="tile"><div class="k">Numbers fact-checked</div><div class="v">7</div></div>
+  </div>
+</header>
+
+<h2>Cross-type findings</h2>
+<div class="finding">
+  <h3><span class="chip critical">Critical</span>Table rows point to missing images</h3>
+  <div>3 table rows reference image files that are not present in the dataset.</div>
+<div class="rec"><b>Recommendation:</b> Remove these 3 rows from the table or locate the missing image files to ensure data integrity.</div>  <div class="ev">Evidence: mix_links_001</div>
+</div>
+<div class="finding">
+  <h3><span class="chip warning">Warning</span>Unreferenced image files found</h3>
+  <div>There are 4 image files in the dataset that have no corresponding row in the annotations table.</div>
+<div class="rec"><b>Recommendation:</b> Update the annotations table to include these 4 unreferenced images or remove the files from the dataset.</div>  <div class="ev">Evidence: mix_links_001</div>
+</div>
+<div class="finding">
+  <h3><span class="chip critical">Critical</span>Label disagreements between table and folders</h3>
+  <div>The label column in the table disagrees with the file&#39;s folder location for 3 rows.</div>
+<div class="rec"><b>Recommendation:</b> Manually audit these 3 rows to determine the correct label and reconcile the table with the folder structure.</div>  <div class="ev">Evidence: mix_links_001</div>
+</div>
+<div class="finding">
+  <h3><span class="chip critical">Critical</span>Dataset quality limited by table-image mismatch</h3>
+  <div>While image quality is high at 99.7 out of 100, the overall dataset utility is constrained by the table-to-file mapping issues where only 35 of 38 rows successfully match a file.</div>
+<div class="rec"><b>Recommendation:</b> Prioritize resolving the mapping discrepancies to ensure the high-quality images are correctly labeled for training.</div>  <div class="ev">Evidence: mix_overview_001, mix_links_001</div>
+</div>
+<div class="finding">
+  <h3><span class="chip warning">Warning</span>Duplicate row references to a single file</h3>
+  <div>The evidence notes that 1 file is referenced by more than one row in the annotations table.</div>
+<div class="rec"><b>Recommendation:</b> Inspect and remove duplicate table rows pointing to the same image file to prevent training bias.</div>  <div class="ev">Evidence: mix_links_001</div>
+</div>
+
+<h2>Each data type</h2>
+<p class="ev">Each type was profiled, cleaned, analyzed, and reviewed by its own crew. Full per-type reports, cleaned data, and pipeline scripts are in <code>cleaned_by_type.zip</code>.</p>
+<div class="finding">
+  <h3>Table · 1 file(s) · quality 85.1 → 100.0 · rows 38 → 37</h3>
+<div><b>Dataset quality is high, but format is incompatible with image classification goals.</b></div>  <ul><li><span class="chip info">Info</span>Data quality score improved: The raw data quality score started at 85.1 out of 100 and improved to 100.0 out of 100 after cleaning.</li><li><span class="chip warning">Warning</span>Duplicate rows removed: The raw dataset contained 1 exact duplicate row, representing 2.63% of the data, which was successfully removed.</li><li><span class="chip warning">Warning</span>Notes column missingness and imputation: The notes column had 44.74% missing values and 5 hidden-missing tokens in the raw dataset, and mode imputation significantly inflated the frequency of the most common category from 9 to 25.</li><li><span class="chip info">Info</span>Confidence and area metrics skewness: Confidence has a skew of -0.30 and area_px has a skew of -0.21 in the cleaned dataset.</li><li><span class="chip warning">Warning</span>Dataset format mismatch with user goal: The user goal is to train an image classifier, but the dataset provided is tabular metadata containing features rather than actual image pixel tensors or binary image data.</li></ul>
+</div>
+<div class="finding">
+  <h3>Image · 38 file(s) · quality 99.7 → 99.7 · images 38 → 38</h3>
+<div><b>High-quality but critically undersized dataset for classification.</b></div>  <ul><li><span class="chip warning">Warning</span>Extremely Small Total Dataset Size: The dataset contains only 38 images in total across all classes.</li><li><span class="chip warning">Warning</span>Mild Class Imbalance Present: Circles represent 16 images (42.11%), squares 12 images (31.58%), and triangles 10 images (26.32%), yielding an imbalance ratio of 1.6 between the largest and smallest classes.</li><li><span class="chip info">Info</span>Zero Corrupt Images Found: Out of 38 analyzed images, there are 0 corrupt files and 0 images needing EXIF rotation.</li><li><span class="chip info">Info</span>No Duplicates Detected: There are 0 exact duplicate groups, 0 near-duplicate groups, and 0 cross-class duplicate files.</li><li><span class="chip info">Info</span>High Initial Image Quality Score: The overall image data quality score is 99.7 out of 100, reflecting 0 deductions for low quality, corruption, or duplicates.</li><li><span class="chip info">Info</span>No Suspected Mislabeling in Vision Review: Based on an AI vision review observation, there are 0 suspected mislabeled images across all classes.</li><li><span class="chip info">Info</span>Uniform Image Dimensions and Formats: All 38 images maintain a uniform width and height of 128 pixels, utilize the RGB mode, and belong to the JPEG format.</li><li><span class="chip info">Info</span>Cleaning Summary Shows No Image Loss: The cleaning pipeline processed 38 images before and 38 images after, resulting in 0 removed files while preserving a 99.7 out of 100 quality score.</li></ul>
+</div>
+<h2>Table-to-file links</h2>
+<p class="ev"><code>annotations.csv</code>, column <code>image</code>: 35 of 38 rows match a file; 3 point to missing files; 4 of 38 files have no row; column <code>label</code> disagrees with the folder for 3 rows.</p>
+<div class="tbl"><table>
+<tr><th>Problem</th><th>Examples</th></tr>
+<tr><td>Rows naming missing files</td><td>circle_100.jpg, circle_101.jpg, circle_102.jpg</td></tr><tr><td>Files with no row</td><td>shapes_survey/images/circles/circle_003.jpg, shapes_survey/images/squares/square_012.jpg, shapes_survey/images/triangles/triangle_005.jpg, shapes_survey/images/triangles/triangle_010.jpg</td></tr><tr><td>Label disagrees (row 4)</td><td><code>shapes_survey/images/circles/circle_004.jpg</code>: table says "square", folder is "circles"</td></tr><tr><td>Label disagrees (row 14)</td><td><code>shapes_survey/images/circles/circle_014.jpg</code>: table says "triangle", folder is "circles"</td></tr><tr><td>Label disagrees (row 24)</td><td><code>shapes_survey/images/squares/square_008.jpg</code>: table says "circle", folder is "squares"</td></tr></table></div>
+
+<h2>Next steps</h2>
+<ul><li>Resolve the 3 critical label disagreements between the table and folder structure.</li><li>Address the 3 missing file references to ensure 1:1 mapping between annotations and images.</li><li>Verify the utility of the &#39;notes&#39; column given that mode imputation increased the frequency of the common category from 9 to 25.</li><li>Collect additional data to mitigate the 1.6 class imbalance ratio and increase the total sample size beyond 38 images.</li><li>Convert the existing tabular metadata into a format compatible with standard image classification pipelines.</li></ul>
+
+<h2>How the agents checked themselves</h2>
+<p class="ev">Model calls 27 · guardrail catches 7 · self-corrections 8 · review rounds 6 · model switches 7 · numbers fact-checked 7</p>
+<ol class="timeline">
+<li><span class="t">+6s</span><b>Switched models for the strategist</b><pre>gemini-3.8-flash hit its daily limit; trying the next model in the pool.</pre></li>
+<li><span class="t">+7s</span><b>Switched models for the strategist</b><pre>gemini-3.7-flash hit its daily limit; trying the next model in the pool.</pre></li>
+<li><span class="t">+9s</span><b>Switched models for the strategist</b><pre>gemini-3.7-flash hit its daily limit; trying the next model in the pool.</pre></li>
+<li><span class="t">+9s</span><b>Switched models for the strategist</b><pre>gemini-3.6-flash hit its daily limit; trying the next model in the pool.</pre></li>
+<li><span class="t">+11s</span><b>Switched models for the strategist</b><pre>gemini-3.6-flash hit its daily limit; trying the next model in the pool.</pre></li>
+<li><span class="t">+15s</span><b>Switched models for the strategist</b><pre>gemini-3.5-flash hit its server error 503 (set aside for 30s); trying the next model in the pool.</pre></li>
+<li><span class="t">+15s</span><b>Switched models for the strategist</b><pre>gemini-3.5-flash hit its server error 503 (set aside for 120s); trying the next model in the pool.</pre></li>
+<li><span class="t">+18s</span><b>Cleaning plan failed the dry run</b><pre>Step 6 (impute_median on [&#39;confidence&#39;, &#39;area_px&#39;]) failed: TypeError: Cannot perform reduction &#39;median&#39; with string dtype. The column is still text: convert it first (cast_numeric, strip_currency, or parse_percent).</pre></li>
+<li><span class="t">+21s</span><b>Revised output accepted</b></li>
+<li><span class="t">+24s</span><b>Findings failed the fact check</b><pre>Finding 7 (&#39;Uniform Image Dimensions and Formats&#39;): &#39;widths.min&#39; isn&#39;t in [&#39;img_overview_001&#39;, &#39;img_overview_002&#39;]. Use &#39;&lt;column&gt;.&lt;stat&gt;&#39; keys that appear in the evidence, and cite the artifact that contains them.
+Finding 7 (&#39;Uniform Image Dimensions and Formats&#39;): &#39;widths.max&#39; isn&#39;t in [&#39;img_overview_001&#39;, &#39;img_overview_002&#39;]. Use &#39;&lt;column&gt;.&lt;stat&gt;&#39; keys that appear in the evidence, and cite the artifact that contains them.</pre></li>
+<li><span class="t">+26s</span><b>Findings failed the fact check</b><pre>Finding 4 (&#39;Class distribution in target labels&#39;): &#39;label.top.circle&#39; isn&#39;t in [&#39;tbl_columns_001&#39;]. Use &#39;&lt;column&gt;.&lt;stat&gt;&#39; keys that appear in the evidence, and cite the artifact that contains them.
+Finding 4 (&#39;Class distribution in target labels&#39;): &#39;label.top.square&#39; isn&#39;t in [&#39;tbl_columns_001&#39;]. Use &#39;&lt;column&gt;.&lt;stat&gt;&#39; keys that appear in the evidence, and cite the artifact that contains them.
+Finding 4 (&#39;Class distribution in target labels&#39;): &#39;label.top.triangle&#39; isn&#39;t in [&#39;tbl_columns_001&#39;]. Use &#39;&lt;column&gt;.&lt;stat&gt;&#39; keys that appear in the evidence, and cite the artifact that contains them.</pre></li>
+<li><span class="t">+28s</span><b>Revised output accepted</b></li>
+<li><span class="t">+28s</span><b>Revised output accepted</b></li>
+<li><span class="t">+31s</span><b>Reviewer requested 1 change(s)</b><pre>Finding 1 (severity): Finding 1 is marked as critical, but 38 images will not break a model or cause data leakage; small datasets are a warning/limitation rather than a critical model-breaking failure. Fix: Downgrade finding 1 from critical to warning.</pre></li>
+<li><span class="t">+31s</span><b>Reviewer requested 2 change(s) and 1 addition(s)</b><pre>Finding 3 (unsupported): Imputing missing notes with the mode changed the mode category distribution drastically from &#39;edge of frame&#39; (9) to &#39;edge of frame&#39; (25) due to filling 16 missing values. Fix: Update finding 3 to acknowledge that the mode imputation significantly inflated the frequency of the most common category.
+Finding 4 (other): A skewness of around -0.3 is very mild and does not typically require standardizing or normalizing tree-based or deep learning image classifiers. Fix: Soften the recommendation in finding 4 to note that transformation is optional rather than suggested.
+Missed: The user goal is to train an image classifier, but the dataset provided is tabular metadata containing features like confidence, area_px, and notes rather than actual image pixel tensors or binary image data.</pre></li>
+<li><span class="t">+34s</span><b>Findings failed the fact check</b><pre>Finding 1 (&#39;Data quality score improved&#39;): &#39;quality_before&#39; isn&#39;t in [&#39;tbl_quality_002&#39;, &#39;tbl_quality_001&#39;]. Use &#39;&lt;column&gt;.&lt;stat&gt;&#39; keys that appear in the evidence, and cite the artifact that contains them.
+Finding 1 (&#39;Data quality score improved&#39;): &#39;quality_after&#39; isn&#39;t in [&#39;tbl_quality_002&#39;, &#39;tbl_quality_001&#39;]. Use &#39;&lt;column&gt;.&lt;stat&gt;&#39; keys that appear in the evidence, and cite the artifact that contains them.
+Finding 2 (&#39;Duplicate rows removed&#39;): &#39;duplicate_count&#39; isn&#39;t in [&#39;tbl_overview_001&#39;]. Use &#39;&lt;column&gt;.&lt;stat&gt;&#39; keys that appear in the evidence, and cite the artifact that contains them.
+Finding 3 (&#39;Notes column missingness and imputation&#39;): claims missing_pct = 44.74, but the cited evidence says 0.0 (44.74 is &#39;notes.missing_pct&#39; in tbl_columns_001).
+Finding 3 (&#39;Notes column missingness and imputation&#39;): claims hidden_missing = 5.0, but the cited evidence says 0 (5.0 is &#39;notes.hidden_missing&#39; in tbl_columns_001).
+Finding 3 (&#39;Notes column missingness and imputation&#39;): &#39;mode_before&#39; isn&#39;t in [&#39;tbl_columns_001&#39;, &#39;tbl_columns_002&#39;]. Use &#39;&lt;column&gt;.&lt;stat&gt;&#39; keys that appear in the evidence, and cite the artifact that contains them.</pre></li>
+<li><span class="t">+35s</span><b>Findings failed the fact check</b><pre>Finding 5 (&#39;High Initial Image Quality Score&#39;): &#39;deductions.low_quality&#39; isn&#39;t in [&#39;img_quality_score_001&#39;, &#39;img_quality_score_002&#39;]. Use &#39;&lt;column&gt;.&lt;stat&gt;&#39; keys that appear in the evidence, and cite the artifact that contains them.
+Finding 5 (&#39;High Initial Image Quality Score&#39;): &#39;deductions.corrupt&#39; isn&#39;t in [&#39;img_quality_score_001&#39;, &#39;img_quality_score_002&#39;]. Use &#39;&lt;column&gt;.&lt;stat&gt;&#39; keys that appear in the evidence, and cite the artifact that contains them.
+Finding 5 (&#39;High Initial Image Quality Score&#39;): &#39;deductions.duplicates&#39; isn&#39;t in [&#39;img_quality_score_001&#39;, &#39;img_quality_score_002&#39;]. Use &#39;&lt;column&gt;.&lt;stat&gt;&#39; keys that appear in the evidence, and cite the artifact that contains them.
+Finding 8 (&#39;Cleaning Summary Shows No Image Loss&#39;): &#39;quality_score&#39; isn&#39;t in [&#39;cleaning_summary_001&#39;, &#39;img_quality_score_002&#39;]. Use &#39;&lt;column&gt;.&lt;stat&gt;&#39; keys that appear in the evidence, and cite the artifact that contains them.</pre></li>
+<li><span class="t">+42s</span><b>Findings failed the fact check</b><pre>Finding 7 (&#39;Uniform Image Dimensions and Formats&#39;): &#39;img_overview_001.widths.median&#39; isn&#39;t in [&#39;img_overview_001&#39;, &#39;img_overview_002&#39;]. Use &#39;&lt;column&gt;.&lt;stat&gt;&#39; keys that appear in the evidence, and cite the artifact that contains them.</pre></li>
+<li><span class="t">+43s</span><b>Findings failed the fact check</b><pre>Finding 2 (&#39;Duplicate rows removed&#39;): &#39;tbl_overview_001.duplicates&#39; isn&#39;t in [&#39;tbl_overview_001&#39;]. Use &#39;&lt;column&gt;.&lt;stat&gt;&#39; keys that appear in the evidence, and cite the artifact that contains them.
+Finding 3 (&#39;Notes column missingness and imputation&#39;): &#39;tbl_columns_001.notes_mode_raw&#39; isn&#39;t in [&#39;tbl_columns_001&#39;, &#39;tbl_columns_002&#39;]. Use &#39;&lt;column&gt;.&lt;stat&gt;&#39; keys that appear in the evidence, and cite the artifact that contains them.
+Finding 3 (&#39;Notes column missingness and imputation&#39;): &#39;tbl_columns_002.notes_mode_clean&#39; isn&#39;t in [&#39;tbl_columns_001&#39;, &#39;tbl_columns_002&#39;]. Use &#39;&lt;column&gt;.&lt;stat&gt;&#39; keys that appear in the evidence, and cite the artifact that contains them.</pre></li>
+<li><span class="t">+48s</span><b>Revised output accepted</b></li>
+<li><span class="t">+48s</span><b>Revised output accepted</b></li>
+<li><span class="t">+51s</span><b>Reviewer approved the findings</b></li>
+<li><span class="t">+55s</span><b>Reviewer approved the findings</b></li>
+<li><span class="t">+67s</span><b>Reviewer requested 1 change(s) and 1 addition(s)</b><pre>Finding 4 (severity): Finding 4 is classified as a warning, but having multiple unresolvable mapping issues and label disagreements directly leads to incorrect training labels, which meets the criteria for a critical severity issue. Fix: Change the severity of finding 4 from warning to critical.
+Missed: The evidence notes that 1 file is referenced by more than one row (files_referenced_twice), but no finding addresses this duplication.</pre></li>
+<li><span class="t">+72s</span><b>Reviewer approved the findings</b></li>
+</ol>
+
+<h2>Cleaning applied</h2>
+<p>Each data type was cleaned by its own crew.</p>
+<div class="tbl"><table>
+<tr><th>#</th><th>Operation</th><th>Risk</th><th>Columns</th><th>Items</th><th>Why</th></tr>
+</table></div>
+<p class="ev">The same steps are in <code>cleaning_pipeline.py</code>, which you can rerun on the full dataset.</p>
+
+<h2>Charts</h2>
+<div class="charts"><div class="chart" id="chart1"></div></div>
+
+
+
+
+
+
+
+
+
+
+<footer>
+Generated by MOSAIC EDA (Multimodal Orchestrated System for Analysis, Inspection &amp; Cleaning).
+Every number in the findings was checked against the evidence artifacts listed. Models used: gemini-3.1-flash-lite, gemini-3.5-flash-lite.
+</footer>
+</main>
+<script>
+const charts = [{"data": [{"name": "Before cleaning", "x": ["table", "image"], "y": [85.1, 99.7], "type": "bar"}, {"name": "After cleaning", "x": ["table", "image"], "y": [100.0, 99.7], "type": "bar"}], "layout": {"template": {"data": {"barpolar": [{"marker": {"line": {"color": "white", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "barpolar"}], "bar": [{"error_x": {"color": "#2a3f5f"}, "error_y": {"color": "#2a3f5f"}, "marker": {"line": {"color": "white", "width": 0.5}, "pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "bar"}], "carpet": [{"aaxis": {"endlinecolor": "#2a3f5f", "gridcolor": "#C8D4E3", "linecolor": "#C8D4E3", "minorgridcolor": "#C8D4E3", "startlinecolor": "#2a3f5f"}, "baxis": {"endlinecolor": "#2a3f5f", "gridcolor": "#C8D4E3", "linecolor": "#C8D4E3", "minorgridcolor": "#C8D4E3", "startlinecolor": "#2a3f5f"}, "type": "carpet"}], "choropleth": [{"colorbar": {"outlinewidth": 0, "ticks": ""}, "type": "choropleth"}], "contourcarpet": [{"colorbar": {"outlinewidth": 0, "ticks": ""}, "type": "contourcarpet"}], "contour": [{"colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "type": "contour"}], "heatmap": [{"colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "type": "heatmap"}], "histogram2dcontour": [{"colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "type": "histogram2dcontour"}], "histogram2d": [{"colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "type": "histogram2d"}], "histogram": [{"marker": {"pattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}}, "type": "histogram"}], "mesh3d": [{"colorbar": {"outlinewidth": 0, "ticks": ""}, "type": "mesh3d"}], "parcoords": [{"line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "type": "parcoords"}], "pie": [{"automargin": true, "type": "pie"}], "scatter3d": [{"line": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "type": "scatter3d"}], "scattercarpet": [{"marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "type": "scattercarpet"}], "scattergeo": [{"marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "type": "scattergeo"}], "scattergl": [{"marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "type": "scattergl"}], "scattermap": [{"marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "type": "scattermap"}], "scatterpolargl": [{"marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "type": "scatterpolargl"}], "scatterpolar": [{"marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "type": "scatterpolar"}], "scatter": [{"fillpattern": {"fillmode": "overlay", "size": 10, "solidity": 0.2}, "type": "scatter"}], "scatterternary": [{"marker": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "type": "scatterternary"}], "surface": [{"colorbar": {"outlinewidth": 0, "ticks": ""}, "colorscale": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "type": "surface"}], "table": [{"cells": {"fill": {"color": "#EBF0F8"}, "line": {"color": "white"}}, "header": {"fill": {"color": "#C8D4E3"}, "line": {"color": "white"}}, "type": "table"}]}, "layout": {"annotationdefaults": {"arrowcolor": "#2a3f5f", "arrowhead": 0, "arrowwidth": 1}, "autotypenumbers": "strict", "coloraxis": {"colorbar": {"outlinewidth": 0, "ticks": ""}}, "colorscale": {"diverging": [[0, "#8e0152"], [0.1, "#c51b7d"], [0.2, "#de77ae"], [0.3, "#f1b6da"], [0.4, "#fde0ef"], [0.5, "#f7f7f7"], [0.6, "#e6f5d0"], [0.7, "#b8e186"], [0.8, "#7fbc41"], [0.9, "#4d9221"], [1, "#276419"]], "sequential": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]], "sequentialminus": [[0.0, "#0d0887"], [0.1111111111111111, "#46039f"], [0.2222222222222222, "#7201a8"], [0.3333333333333333, "#9c179e"], [0.4444444444444444, "#bd3786"], [0.5555555555555556, "#d8576b"], [0.6666666666666666, "#ed7953"], [0.7777777777777778, "#fb9f3a"], [0.8888888888888888, "#fdca26"], [1.0, "#f0f921"]]}, "colorway": ["#636efa", "#EF553B", "#00cc96", "#ab63fa", "#FFA15A", "#19d3f3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"], "font": {"color": "#2a3f5f"}, "geo": {"bgcolor": "white", "lakecolor": "white", "landcolor": "white", "showlakes": true, "showland": true, "subunitcolor": "#C8D4E3"}, "hoverlabel": {"align": "left"}, "hovermode": "closest", "paper_bgcolor": "white", "plot_bgcolor": "white", "polar": {"angularaxis": {"gridcolor": "#EBF0F8", "linecolor": "#EBF0F8", "ticks": ""}, "bgcolor": "white", "radialaxis": {"gridcolor": "#EBF0F8", "linecolor": "#EBF0F8", "ticks": ""}}, "scene": {"xaxis": {"backgroundcolor": "white", "gridcolor": "#DFE8F3", "gridwidth": 2, "linecolor": "#EBF0F8", "showbackground": true, "ticks": "", "zerolinecolor": "#EBF0F8"}, "yaxis": {"backgroundcolor": "white", "gridcolor": "#DFE8F3", "gridwidth": 2, "linecolor": "#EBF0F8", "showbackground": true, "ticks": "", "zerolinecolor": "#EBF0F8"}, "zaxis": {"backgroundcolor": "white", "gridcolor": "#DFE8F3", "gridwidth": 2, "linecolor": "#EBF0F8", "showbackground": true, "ticks": "", "zerolinecolor": "#EBF0F8"}}, "shapedefaults": {"line": {"color": "#2a3f5f"}}, "ternary": {"aaxis": {"gridcolor": "#DFE8F3", "linecolor": "#A2B1C6", "ticks": ""}, "baxis": {"gridcolor": "#DFE8F3", "linecolor": "#A2B1C6", "ticks": ""}, "bgcolor": "white", "caxis": {"gridcolor": "#DFE8F3", "linecolor": "#A2B1C6", "ticks": ""}}, "title": {"x": 0.05}, "xaxis": {"automargin": true, "gridcolor": "#EBF0F8", "linecolor": "#EBF0F8", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "#EBF0F8", "zerolinewidth": 2}, "yaxis": {"automargin": true, "gridcolor": "#EBF0F8", "linecolor": "#EBF0F8", "ticks": "", "title": {"standoff": 15}, "zerolinecolor": "#EBF0F8", "zerolinewidth": 2}}}, "font": {"family": "Inter, system-ui, sans-serif", "color": "#2B1D14"}, "margin": {"l": 50, "r": 20, "t": 50, "b": 50}, "title": {"text": "Data quality by type (out of 100)"}, "barmode": "group", "colorway": ["#B5471B", "#2F6F73", "#A57A00", "#7A3E65", "#5E7F33", "#4E6E9E", "#B8604F", "#8A6440"], "height": 340, "paper_bgcolor": "rgba(0,0,0,0)", "plot_bgcolor": "rgba(0,0,0,0)"}}];
+const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+charts.forEach((fig, i) => {
+  const layout = Object.assign({}, fig.layout, {autosize: true});
+  if (dark) { layout.font = Object.assign({}, layout.font, {color: '#F3E9DC'}); }
+  Plotly.newPlot('chart' + (i + 1), fig.data, layout, {displaylogo: false, responsive: true});
+});
+</script>
+</body></html>

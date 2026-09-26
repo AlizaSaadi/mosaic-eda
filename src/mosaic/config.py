@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     job_ttl_minutes: int = 60
 
     reports_repo: str | None = None
+    reviews_repo: str | None = None  # private dataset for visitor reviews
     log_level: str = "INFO"
 
     @field_validator("gemini_lite_pool", "gemini_flash_pool", mode="before")

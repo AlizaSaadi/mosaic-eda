@@ -127,11 +127,12 @@ def test_a_shared_report_opens_inside_the_space(tmp_path, monkeypatch):
         fetch_shared_report(settings, "../../secrets", download=download)
 
     monkeypatch.setattr(app, "fetch_shared_report", lambda s, job: html)
-    shown = app.show_shared_report(SimpleNamespace(query_params={"report": "x"}))
+    shown, welcome = app.show_shared_report(SimpleNamespace(query_params={"report": "x"}))
     assert shown["visible"] and 'sandbox="allow-scripts"' in shown["value"]
     assert "&lt;h1&gt;Report" in shown["value"]  # escaped into the frame, not into the app
-    hidden = app.show_shared_report(SimpleNamespace(query_params={}))
-    assert hidden["visible"] is False
+    assert welcome["visible"] is False  # a shared link skips the intro
+    hidden, welcome = app.show_shared_report(SimpleNamespace(query_params={}))
+    assert hidden["visible"] is False and welcome["visible"] is True
 
 
 def test_sharing_without_a_token_warns_but_the_run_succeeds(tmp_path):

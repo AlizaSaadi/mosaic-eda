@@ -32,3 +32,5 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 "app.py" = ["E402"]
 # %-formatting keeps the {c} placeholders in the code templates unambiguous
 "src/mosaic/tables/ops.py" = ["UP031"]
+# SVG path data reads best on one line
+"src/mosaic/ui/art.py" = ["E501"]
