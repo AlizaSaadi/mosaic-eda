@@ -95,10 +95,43 @@ def test_sharing_is_opt_in_and_uploads_only_the_reports(tmp_path):
         {"repo_type": "dataset", "exist_ok": True, "private": False},
     )
     assert api.calls[1][2] == [f"reports/{job}/report.html", f"reports/{job}/report.pdf"]
-    assert state.share_urls["report.pdf"] == (
+    assert state.share_urls["PDF report"] == (
         f"https://huggingface.co/datasets/someone/mosaic-eda-reports/resolve/main/reports/"
         f"{job}/report.pdf"
     )
+    assert "Interactive report" not in state.share_urls  # not running on a Space
+
+
+def test_a_shared_report_opens_inside_the_space(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    import mosaic.ui.app as app
+    from mosaic.reporting.share import fetch_shared_report, viewer_url
+
+    monkeypatch.setenv("SPACE_HOST", "someone-mosaic-eda.hf.space")
+    assert viewer_url("20260926-223337-cc6613db") == (
+        "https://someone-mosaic-eda.hf.space/?report=20260926-223337-cc6613db"
+    )
+    settings = Settings(_env_file=None, reports_repo="someone/mosaic-eda-reports")
+    page = tmp_path / "report.html"
+    page.write_text('<h1>Report</h1><script>draw("a & b")</script>', encoding="utf-8")
+    asked = []
+
+    def download(**kwargs):
+        asked.append(kwargs)
+        return str(page)
+
+    html = fetch_shared_report(settings, "20260926-223337-cc6613db", download=download)
+    assert asked[0]["filename"] == "reports/20260926-223337-cc6613db/report.html"
+    with pytest.raises(ValueError):  # no paths or other files through the link
+        fetch_shared_report(settings, "../../secrets", download=download)
+
+    monkeypatch.setattr(app, "fetch_shared_report", lambda s, job: html)
+    shown = app.show_shared_report(SimpleNamespace(query_params={"report": "x"}))
+    assert shown["visible"] and 'sandbox="allow-scripts"' in shown["value"]
+    assert "&lt;h1&gt;Report" in shown["value"]  # escaped into the frame, not into the app
+    hidden = app.show_shared_report(SimpleNamespace(query_params={}))
+    assert hidden["visible"] is False
 
 
 def test_sharing_without_a_token_warns_but_the_run_succeeds(tmp_path):

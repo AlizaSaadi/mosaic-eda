@@ -3,16 +3,24 @@
 Opt-in per run: the user ticks a box, and only the HTML and PDF reports are uploaded
 (never the uploaded data, the cleaned data, or the trace). Reports quote data only as
 short, PII-masked snippets. The repo is public, so the links work for anyone.
+
+Hugging Face serves uploaded HTML as plain text (a deliberate safety measure), so the
+interactive report is shown by the Space itself: /?report=<job id> fetches it from the
+dataset and displays it in a sandboxed frame. The PDF link opens directly in a browser.
 """
 
 from __future__ import annotations
 
+import html
+import os
+import re
 from pathlib import Path
 from typing import Any
 
 from mosaic.config import Settings
 
 SHARED_FILES = ("report.html", "report.pdf")
+JOB_ID = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{8}$")
 
 
 class ShareUnavailable(RuntimeError):
@@ -25,8 +33,14 @@ def sharing_configured(settings: Settings) -> bool:
     )
 
 
+def viewer_url(job_id: str) -> str | None:
+    """The Space's own link to a shared report (None when not running on a Space)."""
+    host = os.environ.get("SPACE_HOST")
+    return f"https://{host}/?report={job_id}" if host else None
+
+
 def share_report(settings: Settings, job_id: str, out: Path, api: Any = None) -> dict[str, str]:
-    """Upload the job's reports in one commit. Returns {file name: public link}."""
+    """Upload the job's reports in one commit. Returns {link name: public link}."""
     if not sharing_configured(settings):
         raise ShareUnavailable("Sharing isn't set up: add HF_TOKEN and REPORTS_REPO.")
     if api is None:
@@ -50,4 +64,34 @@ def share_report(settings: Settings, job_id: str, out: Path, api: Any = None) ->
         commit_message=f"Add MOSAIC EDA report {job_id}",
     )
     base = f"https://huggingface.co/datasets/{repo}/resolve/main/reports/{job_id}"
-    return {f.name: f"{base}/{f.name}" for f in files}
+    links: dict[str, str] = {}
+    viewer = viewer_url(job_id)
+    if viewer and (out / "report.html").exists():
+        links["Interactive report"] = viewer
+    if (out / "report.pdf").exists():
+        links["PDF report"] = f"{base}/report.pdf"
+    return links
+
+
+def fetch_shared_report(settings: Settings, job_id: str, download: Any = None) -> str:
+    """The HTML of a shared report, from the public reports repo."""
+    if not JOB_ID.match(job_id or "") or not settings.reports_repo:
+        raise ValueError("That isn't a valid report link.")
+    if download is None:
+        from huggingface_hub import hf_hub_download as download
+    path = download(
+        repo_id=settings.reports_repo,
+        repo_type="dataset",
+        filename=f"reports/{job_id}/report.html",
+    )
+    return Path(path).read_text(encoding="utf-8")
+
+
+def report_frame(report_html: str) -> str:
+    """Show a report in a sandboxed frame: its charts' scripts run, but it can't touch the
+    app, open pop-ups, or submit forms."""
+    return (
+        '<iframe title="Shared MOSAIC EDA report" sandbox="allow-scripts" '
+        'style="width:100%;height:85vh;border:0;border-radius:12px" '
+        f'srcdoc="{html.escape(report_html, quote=True)}"></iframe>'
+    )

@@ -18,7 +18,7 @@ from mosaic.flow.runtime import JobRuntime
 from mosaic.ingest.models import count_label
 from mosaic.llm.quota import QuotaTracker
 from mosaic.llm.routing import build_tracker
-from mosaic.reporting.share import sharing_configured
+from mosaic.reporting.share import fetch_shared_report, report_frame, sharing_configured
 from mosaic.workspace import create_workspace, sweep_stale
 
 EXAMPLE_CSV = PROJECT_ROOT / "examples" / "datasets" / "messy_sales.csv"
@@ -243,9 +243,26 @@ EXAMPLES = [
 ]
 
 
+def show_shared_report(request: gr.Request):
+    """Links like /?report=<job id> open a shared report inside the app."""
+    job_id = (request.query_params.get("report") or "").strip() if request else ""
+    if not job_id:
+        return gr.update(visible=False)
+    try:
+        report = fetch_shared_report(get_settings(), job_id)
+    except Exception:
+        return gr.update(
+            value="<p><b>That shared report couldn't be found.</b> The link may be mistyped, "
+            "or the report was removed.</p>",
+            visible=True,
+        )
+    return gr.update(value=report_frame(report), visible=True)
+
+
 def build_app() -> gr.Blocks:
     settings = get_settings()
     with gr.Blocks(title="MOSAIC EDA") as demo:
+        shared_view = gr.HTML(visible=False)  # a shared report, opened with ?report=<id>
         gr.Markdown(
             "# MOSAIC EDA\n"
             "**Multimodal Orchestrated System for Analysis, Inspection & Cleaning.** "
@@ -338,6 +355,7 @@ def build_app() -> gr.Blocks:
             button.click(lambda p=path, g=example_goal: (str(p), g), None, [upload, goal]).then(
                 run_analysis, [upload, url, goal, user_key, ask, share], outputs
             )
+        demo.load(show_shared_report, None, [shared_view])
     return demo
 
 
