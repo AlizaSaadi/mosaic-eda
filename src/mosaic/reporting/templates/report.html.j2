@@ -109,12 +109,66 @@ ul{padding-left:20px} footer{margin-top:40px;color:var(--muted);font-size:13px}
 {% endif %}
 
 {% if extras.balance %}
-<h2>Class balance</h2>
+<h2>{{ "Label balance" if extras.text else "Class balance" }}</h2>
 <div class="tbl"><table>
 <tr><th>Class</th><th>{{ unit|capitalize }}</th><th>Share %</th></tr>
 {% for name, c in extras.balance.classes.items() %}<tr><td><code>{{ name }}</code></td><td>{{ c.count }}</td><td>{{ c.share }}</td></tr>{% endfor %}
 </table></div>
 <p class="ev">Largest class / smallest class: {{ extras.balance.imbalance_ratio }}</p>
+{% endif %}
+
+{% if extras.text %}{% set t = extras.text %}
+{% if t.labels and t.labels.mismatches %}
+<h2>Documents that read like another label (checked by code)</h2>
+<p class="ev">{{ t.labels.centroid_agreement_pct }}% of documents are closest to their own label's average vocabulary. These are likely mislabels, not certainties.</p>
+<div class="tbl"><table>
+<tr><th>Document</th><th>Label</th><th>Reads like</th><th>Text (masked)</th></tr>
+{% for m in t.labels.mismatches %}<tr><td><code>{{ m.document }}</code></td><td>{{ m.label }}</td><td>{{ m.closest }}</td><td>{{ m.text }}</td></tr>{% endfor %}
+</table></div>
+{% endif %}
+{% if t.topics %}
+<h2>Topics</h2>
+<p class="ev">Found by NMF on TF-IDF, computed by code. Share is the % of documents mainly about the topic.</p>
+<div class="tbl"><table>
+<tr><th>Topic</th><th>Strongest words</th><th>Share %</th></tr>
+{% for key, tp in t.topics.topics.items() %}<tr><td>{{ loop.index }}</td><td>{{ tp.words|join(", ") }}</td><td>{{ tp.share }}</td></tr>{% endfor %}
+</table></div>
+{% endif %}
+{% if t.terms and t.terms.distinctive_by_label %}
+<h2>Most distinctive words per label</h2>
+<div class="tbl"><table>
+<tr><th>Label</th><th>Words</th></tr>
+{% for label, ws in t.terms.distinctive_by_label.items() %}<tr><td><code>{{ label }}</code></td><td>{{ ws|join(", ") }}</td></tr>{% endfor %}
+</table></div>
+{% endif %}
+{% if t.pii and t.pii.documents_with_pii %}
+<h2>Personal data</h2>
+<p class="ev">{{ t.pii.documents_with_pii }} documents ({{ t.pii.share }}%) contain personal data. Found by pattern matching; examples are masked.</p>
+<div class="tbl"><table>
+<tr><th>Kind</th><th>Documents</th><th>Occurrences</th></tr>
+{% for kind, n in t.pii.documents_by_kind.items() %}<tr><td>{{ kind }}</td><td>{{ n }}</td><td>{{ t.pii.occurrences[kind] }}</td></tr>{% endfor %}
+</table></div>
+{% endif %}
+{% if t.boilerplate and t.boilerplate.lines %}
+<h2>Repeated boilerplate lines</h2>
+<div class="tbl"><table>
+<tr><th>Line (masked)</th><th>Documents</th><th>Share %</th></tr>
+{% for b in t.boilerplate.lines.values() %}<tr><td>{{ b.line }}</td><td>{{ b.documents }}</td><td>{{ b.share }}</td></tr>{% endfor %}
+</table></div>
+{% endif %}
+{% if t.read %}
+<h2>Reading review (AI observation on a sample)</h2>
+<p class="ev">{{ t.read.model }} read {{ t.read.read }} documents chosen to include problem cases, so these don't describe the whole dataset. {{ t.read.overall }}</p>
+<div class="tbl"><table>
+<tr><th>Document</th><th>About</th><th>Sentiment</th><th>Fits label</th><th>Issue</th></tr>
+{% for path, r in t.read.documents.items() %}<tr><td><code>{{ path }}</code></td><td>{{ r.summary }}</td><td>{{ r.sentiment }}</td><td>{{ "n/a" if r.fits_label is none else ("yes" if r.fits_label else "no") }}</td><td>{{ r.issue }}</td></tr>{% endfor %}
+</table></div>
+{% endif %}
+<h2>Sample documents (masked)</h2>
+<div class="tbl"><table>
+<tr><th>Document</th><th>Label</th><th>Text</th></tr>
+{% for s in t.samples %}<tr><td><code>{{ s.document }}</code></td><td>{{ s.label }}</td><td>{{ s.text }}</td></tr>{% endfor %}
+</table></div>
 {% endif %}
 
 {% if extras.flagged %}

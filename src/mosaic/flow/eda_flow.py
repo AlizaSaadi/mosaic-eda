@@ -1,6 +1,6 @@
 """The MOSAIC Flow: code routes the job, agents reason inside their own steps.
 
-Tables and images, end to end (a data-type adapter supplies what differs):
+Tables, text, images, and audio, end to end (a data-type adapter supplies what differs):
 ingest -> route -> profile (code) -> triage (agent) -> plan cleaning (agent; dry-run and
 distribution guardrails; safe-only fallback) -> apply cleaning + re-profile (code) ->
 findings (agent; fact-check guardrail) -> review (agent) -> [revise -> review] at most
@@ -10,6 +10,7 @@ twice -> summary (agent) -> report (code).
 from __future__ import annotations
 
 import json
+import threading
 import time
 from typing import Any
 
@@ -22,7 +23,7 @@ from mosaic.flow.runtime import JobRuntime
 from mosaic.guardrails.task_guardrails import GuardContext, parse_output
 from mosaic.ingest.models import IngestError
 from mosaic.ingest.service import ingest
-from mosaic.llm.quota import QuotaExhausted
+from mosaic.llm.quota import JobTimeout, QuotaExhausted
 from mosaic.models.agent_outputs import (
     FindingsReport,
     ReportNarrative,
@@ -61,6 +62,7 @@ class EDAState(FlowState):
 
 
 MAX_REVISIONS = 2
+STAGE_GRACE_S = 30  # a stage may finish its last request after the deadline
 CHECK_KINDS = ("guardrail", "fix", "fallback", "review")
 
 
@@ -93,16 +95,52 @@ class EDAFlow(Flow[EDAState]):
     def _timed(self, name: str, start: float) -> None:
         self.state.timings[name] = round(time.time() - start, 2)
 
+    def _timed_out(self) -> None:
+        minutes = round(self._rt.settings.max_job_seconds / 60)
+        self._fail(
+            f"This run took longer than {minutes} minutes, usually because Gemini's free tier "
+            "is overloaded right now. Try again in a few minutes."
+        )
+
+    def _kickoff_within_deadline(self, name: str, inputs: dict[str, Any]):
+        """Run the stage in a worker thread and stop waiting when the job's time is up, even
+        if a model request hangs past its own timeout. (An abandoned stage finishes in the
+        background; its result is ignored.)"""
+        left = self._rt.tracker.left()
+        if left <= 0:
+            raise JobTimeout("The run used up its time budget.")
+        box: dict[str, Any] = {}
+
+        def work() -> None:
+            try:
+                box["result"] = self._crew.stage(name).kickoff(inputs=inputs)
+            except BaseException as exc:  # handed back to the Flow's thread below
+                box["error"] = exc
+
+        worker = threading.Thread(target=work, name=f"stage-{name}", daemon=True)
+        worker.start()
+        worker.join(left + STAGE_GRACE_S)
+        if worker.is_alive():
+            raise JobTimeout(f"The {name} step was still running when time ran out.")
+        if "error" in box:
+            raise box["error"]
+        return box["result"]
+
     def _run_stage(self, name: str, inputs: dict[str, Any], *, fatal: bool = True):
         """Run a one-task crew. Non-fatal stages post a warning and let the Flow degrade."""
         try:
-            return self._crew.stage(name).kickoff(inputs=inputs)
-        except QuotaExhausted:
-            self._fail(
-                "Today's free Gemini quota is used up. Try again tomorrow, or add your own "
-                "API key in the settings."
-            )
-        except Exception as exc:  # a crew that still fails after its retries
+            return self._kickoff_within_deadline(name, inputs)
+        except Exception as exc:
+            if isinstance(exc, JobTimeout) or self._rt.expired():  # can look like quota
+                self._timed_out()
+                return None
+            if isinstance(exc, QuotaExhausted):
+                self._fail(
+                    "Today's free Gemini quota is used up. Try again tomorrow, or add your own "
+                    "API key in the settings."
+                )
+                return None
+            # a crew that still fails after its retries
             message = f"The {name.replace('_', ' ')} step failed: {str(exc)[:300]}"
             if fatal:
                 self._fail(message)
@@ -128,8 +166,8 @@ class EDAFlow(Flow[EDAState]):
         if adapter is None:
             found = ", ".join(f"{n} {m.value}" for m, n in manifest.counts.items())
             self._fail(
-                f"Found {found}. This version analyzes tables, images, and audio; text and "
-                "video are coming next.",
+                f"Found {found}. This version analyzes tables, text, images, and audio; video "
+                "is coming next.",
                 "unsupported",
             )
             return
@@ -162,7 +200,7 @@ class EDAFlow(Flow[EDAState]):
     def profile_raw(self) -> None:
         t0 = time.time()
         adapter = self._adapter
-        self._step("Profiling the raw data (code only; images get one vision request)")
+        self._step("Profiling the raw data (code, plus one model review for images, audio, text)")
         quality, target, items = adapter.profile_raw(self.state.goal)
         self.state.quality_raw, self.state.target, self.state.rows_before = quality, target, items
         self._guard.df = adapter.guard_df

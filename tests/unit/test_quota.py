@@ -128,3 +128,17 @@ def test_circuit_breaker_backs_off_longer_and_resets_on_success():
     assert t.try_acquire(LITE)[0] == "lite-a"
     t.note_success("lite-a")
     assert t.note_failure("lite-a") == 30  # back to the shortest pause
+
+
+def test_a_job_deadline_stops_model_calls():
+    import pytest
+
+    from mosaic.llm.quota import DeadlineTracker, JobTimeout
+
+    clock = FakeClock(START)
+    tracker = DeadlineTracker(make_tracker(clock), deadline=START + 10, clock=clock)
+    assert tracker.acquire(LITE)  # time left: works as usual
+    assert tracker.snapshot()  # everything else passes through to the shared tracker
+    clock.now = START + 11
+    with pytest.raises(JobTimeout):
+        tracker.acquire(LITE)

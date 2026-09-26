@@ -24,6 +24,10 @@ class QuotaExhausted(RuntimeError):
     """Every model on the route is out of quota for the day."""
 
 
+class JobTimeout(RuntimeError):
+    """The job used up its time budget (usually because Gemini is overloaded)."""
+
+
 @dataclass(frozen=True)
 class PoolRule:
     """Use `pool` only while more than `min_fraction_left` of its daily total is left."""
@@ -210,3 +214,30 @@ class QuotaTracker:
     def runs_left_estimate(self, calls_per_run: int = 8) -> int:
         """Rough number of live runs left today. Lite does most of the work."""
         return self.pool_remaining("lite") // max(calls_per_run, 1)
+
+
+class DeadlineTracker:
+    """One job's view of the shared tracker: model calls stop once the job's time is up.
+
+    Every model call goes through acquire(), so this bounds a whole run even when Gemini
+    is overloaded and calls keep timing out and falling back.
+    """
+
+    def __init__(
+        self, tracker: QuotaTracker, deadline: float, clock: Callable[[], float] = time.time
+    ) -> None:
+        self._tracker = tracker
+        self.deadline = deadline
+        self._clock = clock
+
+    def left(self) -> float:
+        return self.deadline - self._clock()
+
+    def acquire(self, rules: Iterable[PoolRule], max_wait: float = 120.0) -> str:
+        left = self.left()
+        if left <= 0:
+            raise JobTimeout("The run used up its time budget.")
+        return self._tracker.acquire(rules, max_wait=min(max_wait, left))
+
+    def __getattr__(self, name: str):
+        return getattr(self._tracker, name)

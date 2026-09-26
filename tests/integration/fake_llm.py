@@ -389,6 +389,121 @@ class FakeListenClient:
         self.models = FakeListenModels()
 
 
+# ---- text datasets ----
+
+TEXT_MISLABELS = [
+    "billing/ticket_bill_052.txt",
+    "shipping/ticket_ship_047.txt",
+    "technical/ticket_tech_033.txt",
+]
+
+
+class TextScriptedLLM(ScriptedLLM):
+    """Answers the text prompts; review and revision reuse the table behavior."""
+
+    def _triage(self) -> dict:
+        return {
+            "dataset_description": "Support tickets labeled billing, shipping, technical.",
+            "focus_areas": ["mislabels", "personal data", "duplicates"],
+            "target_column": None,
+        }
+
+    def _plan(self, text: str) -> dict:
+        return {
+            "summary": "Repair text, mask personal data, remove duplicates and empty tickets.",
+            "ops": [
+                {"op": "fix_encoding", "rationale": "Garbled characters."},
+                {"op": "strip_html", "rationale": "Web form markup."},
+                {"op": "normalize_whitespace", "rationale": "Tidy spacing."},
+                {
+                    "op": "strip_boilerplate",
+                    "params": {"min_share": 0.3},
+                    "rationale": "Disclaimer under many tickets.",
+                    "evidence": ["txt_boilerplate_001"],
+                },
+                {"op": "mask_pii", "rationale": "Emails and cards.", "evidence": ["txt_pii_001"]},
+                {
+                    "op": "drop_exact_duplicates",
+                    "rationale": "Copies.",
+                    "evidence": ["txt_dupes_001"],
+                },
+                {
+                    "op": "drop_near_duplicates",
+                    "params": {"threshold": 0.8},
+                    "rationale": "Edited copies.",
+                    "evidence": ["txt_dupes_001"],
+                },
+                {
+                    "op": "drop_short_documents",
+                    "params": {"min_words": 5},
+                    "rationale": "Empty and one-word tickets.",
+                    "evidence": ["txt_quality_001"],
+                },
+                {
+                    "op": "flag_suspected_mislabels",
+                    "params": {"documents": TEXT_MISLABELS},
+                    "rationale": "They read like another label.",
+                    "evidence": ["txt_labels_001"],
+                },
+            ],
+        }
+
+    def _findings(self, text: str) -> dict:
+        mismatches = _num(r"(\d+) documents read more like another label", text)
+        ratio = _num(r"largest/smallest ratio ([\d.]+)", text)
+        pii = _num(r"(\d+) documents \([\d.]+%\) contain personal data", text)
+        first = not self._state.get("findings_attempted")
+        self._state["findings_attempted"] = True
+        claimed = round(ratio + 2, 2) if first else round(ratio, 2)
+        return {
+            "findings": [
+                {
+                    "title": "Labels are unevenly sized",
+                    "severity": "warning",
+                    "statement": f"The largest label is {claimed} times the smallest.",
+                    "evidence": ["txt_balance_001"],
+                    "claimed_metrics": [{"key": "imbalance_ratio", "value": claimed}],
+                },
+                {
+                    "title": "Some tickets read like another label",
+                    "severity": "critical",
+                    "statement": f"{int(mismatches)} documents read like another label.",
+                    "evidence": ["txt_labels_001"],
+                    "claimed_metrics": [{"key": "label_mismatches", "value": mismatches}],
+                },
+                {
+                    "title": "Personal data in tickets",
+                    "severity": "warning",
+                    "statement": f"{int(pii)} documents contain personal data.",
+                    "evidence": ["txt_pii_001"],
+                    "claimed_metrics": [{"key": "documents_with_pii", "value": pii}],
+                },
+            ]
+        }
+
+
+class FakeReadModels:
+    def generate_content(self, model, contents, config):
+        from types import SimpleNamespace
+
+        from mosaic.text.review import DocReview, ReadReport
+
+        count = len(re.findall(r"Document (\d+) \(label", contents[0]))
+        report = ReadReport(
+            docs=[
+                DocReview(doc=n, summary="a support request", sentiment="negative")
+                for n in range(1, count + 1)
+            ],
+            overall="Short customer support tickets.",
+        )
+        return SimpleNamespace(parsed=report, text=report.model_dump_json())
+
+
+class FakeReadClient:
+    def __init__(self, api_key=None):
+        self.models = FakeReadModels()
+
+
 def fake_whisper(expected: dict):
     """Returns the known transcript for each clip, in the order the adapter sends them."""
     order = sorted(expected)

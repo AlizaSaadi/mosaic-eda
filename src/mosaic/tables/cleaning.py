@@ -138,9 +138,16 @@ def execute_plan(
         work = after
     loss = 1 - len(work) / max(start_rows, 1)
     if loss > max_row_loss:
+        worst = max(run.steps, key=lambda s: s.rows_before - s.rows_after, default=None)
+        culprit = (
+            f" Step {worst.index} ({worst.op}) alone removed {worst.rows_before - worst.rows_after}"
+            ": check its parameters."
+            if worst and worst.rows_before > worst.rows_after
+            else ""
+        )
         run.errors.append(
             f"The plan removes {loss:.0%} of {unit} ({start_rows - len(work)} of {start_rows}), "
-            f"over the {max_row_loss:.0%} limit. Use less destructive operations."
+            f"over the {max_row_loss:.0%} limit.{culprit} Use less destructive operations."
         )
     run.df = work
     return run
@@ -159,6 +166,8 @@ def _load_code(table: LoadedTable) -> str:
             f"    df = pd.read_excel(path, sheet_name={table.sheet!r}, header={table.header_row}, "
             f"dtype=str)\n    return df.fillna('')"
         )
+    if table.format == "log":
+        return "    return parse_log_lines(path)"
     if table.format == "jsonl":
         return "    df = pd.read_json(path, lines=True, dtype=False)\n    return df.astype(str)"
     return (

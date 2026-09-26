@@ -18,7 +18,19 @@ HEAD_BYTES = 64 * 1024
 DOC_NAMES = re.compile(r"^(readme|license|licence|changelog|citation)(\.\w+)?$", re.I)
 DOC_EXTENSIONS = {".md", ".rst"}
 LOG_LINE = re.compile(
-    r"^\s*(\[?\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}|\[?(INFO|WARN|WARNING|ERROR|DEBUG)\]?\b)", re.I
+    r"^\s*(\[?\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}|\[?(INFO|WARN|WARNING|ERROR|DEBUG)\]?\b"
+    r'|\S+ \S+ \S+ \[[^\]]+\] "[A-Z]+ '  # web server access log
+    r"|[A-Z][a-z]{2}\s+\d{1,2} \d{2}:\d{2}:\d{2} \S+ )",  # syslog
+    re.I,
+)
+# A timestamp followed by a level, an access log, or syslog: a CSV with a date column
+# matches LOG_LINE but not this
+STRONG_LOG = re.compile(
+    r"^\s*(\[?\d{4}-\d{2}-\d{2}[ T][\d:.,]+\S*\]?\s+\[?(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING"
+    r"|ERROR|CRITICAL|FATAL)\b|\[?(DEBUG|INFO|WARN|WARNING|ERROR)\]?\s"
+    r'|\S+ \S+ \S+ \[[^\]]+\] "[A-Z]+ '
+    r"|[A-Z][a-z]{2}\s+\d{1,2} \d{2}:\d{2}:\d{2} \S+ )",
+    re.I,
 )
 
 _FILETYPE_MAP = {
@@ -75,6 +87,15 @@ def _decode(head: bytes) -> str | None:
     return None
 
 
+def _looks_like_prose(lines: list[str]) -> bool:
+    """Commas in sentences ("Hi, my order...") are followed by a space and sit in long,
+    wordy lines; CSV commas usually aren't."""
+    commas = sum(ln.count(",") for ln in lines)
+    spaced = sum(len(re.findall(r",(?:\s|$)", ln)) for ln in lines)
+    words_per_line = sum(len(ln.split()) for ln in lines) / len(lines)
+    return commas > 0 and spaced / commas >= 0.8 and words_per_line >= 6
+
+
 def _table_delimiter(text: str) -> str | None:
     lines = [ln for ln in text.splitlines()[:50] if ln.strip()]
     if len(lines) < 2:
@@ -84,6 +105,8 @@ def _table_delimiter(text: str) -> str | None:
     try:
         dialect = csv.Sniffer().sniff("\n".join(lines[:20]), delimiters=",;\t|")
     except csv.Error:
+        return None
+    if dialect.delimiter == "," and _looks_like_prose(lines):
         return None
     rows = list(csv.reader(io.StringIO("\n".join(lines)), dialect))
     widths = {len(r) for r in rows}
@@ -109,11 +132,14 @@ def _text_kind(text: str) -> Detection:
             pass
     if json_lines >= max(2, int(min(len(lines), 20) * 0.9)):
         return Detection(modality=Modality.TABLE, format="jsonl")
+    head = lines[:50]
+    if sum(bool(STRONG_LOG.match(ln)) for ln in head) / len(head) >= 0.8:
+        return Detection(modality=Modality.TEXT, format="log")  # log messages contain commas
+    log_share = sum(bool(LOG_LINE.match(ln)) for ln in head) / len(head)
     delimiter = _table_delimiter(text)
     if delimiter:
         name = {",": "csv", "\t": "tsv"}.get(delimiter, "csv")
         return Detection(modality=Modality.TABLE, format=name, detail=f"delimiter {delimiter!r}")
-    log_share = sum(bool(LOG_LINE.match(ln)) for ln in lines[:50]) / min(len(lines), 50)
     if log_share >= 0.6:
         return Detection(modality=Modality.TEXT, format="log")
     return Detection(modality=Modality.TEXT, format="txt")
@@ -124,6 +150,8 @@ def sniff(path: Path) -> Detection:
         head = handle.read(HEAD_BYTES)
     ext = path.suffix.lower()
     if not head:
+        if ext in {".txt", ".text"}:  # an empty document is a finding in a text corpus
+            return Detection(modality=Modality.TEXT, format="txt", detail="empty")
         return Detection(modality=Modality.UNKNOWN, format="empty", detail="empty file")
 
     if head.startswith(b"PK\x03\x04") or head.startswith(b"PK\x05\x06"):

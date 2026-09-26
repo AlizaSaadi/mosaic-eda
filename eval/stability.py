@@ -27,6 +27,7 @@ EXAMPLES = {
     "table": (ROOT / "examples/datasets/messy_sales.csv", "Predict which customers churned"),
     "image": (ROOT / "examples/datasets/shapes_dataset.zip", "Train an image classifier"),
     "audio": (ROOT / "examples/datasets/speech_commands.zip", "Train a keyword-spotting model"),
+    "text": (ROOT / "examples/datasets/support_tickets.zip", "Train a support ticket classifier"),
 }
 
 
@@ -55,6 +56,8 @@ def run_once(source: Path, goal: str, tracker) -> dict:
         "partial": any("partially verified" in n for n in flow.state.notes),
         "rejections": rejections,
         "review": [e.title for e in events if e.kind == "review"],
+        "error": flow.state.error,
+        "switches": [e.detail for e in events if e.kind == "fallback"],
     }
 
 
@@ -73,6 +76,10 @@ def main(runs: int, only: str = "") -> None:
                 f"fallback_plan={r['fallback_plan']} partial={r['partial']} "
                 f"review={r['review']}"
             )
+            if r["error"]:
+                print(f"   error: {r['error'][:300]}")
+            if r["switches"]:
+                print(f"   model switches ({len(r['switches'])}): {r['switches'][:4]}")
             for title, detail in r["rejections"]:
                 first = detail.splitlines()[0] if detail else ""
                 print(f"   - {title}: {first[:230]}")

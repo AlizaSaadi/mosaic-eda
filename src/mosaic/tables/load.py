@@ -115,6 +115,16 @@ def load_table(path: Path, fmt: str) -> LoadedTable:
         raw = sheets[table.sheet].fillna("")
         rows = [[str(c) for c in row] for row in raw.itertuples(index=False)]
         table.df = _frame_from_rows(rows, table)
+    elif fmt == "log":
+        from mosaic.tables.pipeline_helpers import parse_log_lines
+
+        table.df = parse_log_lines(path)
+        table.encoding = "utf-8"
+        style = table.df.attrs.get("log_format", "")
+        table.notes.append(
+            f"Parsed the log ({style} format) into a table of {len(table.df):,} records; "
+            "lines that didn't match (such as stack traces) were joined to the record above."
+        )
     elif fmt == "jsonl":
         text, table.encoding = decode_bytes(path.read_bytes())
         df = pd.read_json(io.StringIO(text), lines=True, dtype=False)

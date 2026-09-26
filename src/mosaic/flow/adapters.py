@@ -12,6 +12,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from PIL import Image
 
@@ -25,6 +26,7 @@ from mosaic.audio.transcribe import transcribe_clips
 from mosaic.crews.audio.crew import AudioCrew
 from mosaic.crews.image.crew import ImageCrew
 from mosaic.crews.table.crew import TableCrew
+from mosaic.crews.text.crew import TextCrew
 from mosaic.flow.runtime import JobRuntime
 from mosaic.images import pipeline_helpers as image_helpers
 from mosaic.images.ops import IMAGE_OPS, image_namespace
@@ -45,8 +47,13 @@ from mosaic.tables.cleaning import (
 from mosaic.tables.load import LoadedTable, load_table
 from mosaic.tables.ops import CleaningOp, CleaningPlan, catalog_text
 from mosaic.tables.profile import ProfileResult, profile_table
+from mosaic.text import pipeline_helpers as text_helpers
+from mosaic.text.ops import TEXT_OPS, text_namespace
+from mosaic.text.profile import TextProfile, profile_text, snippet
+from mosaic.text.review import pick_documents, reading_review
 
 MAX_CLASS_LOSS = 0.5
+MAX_DOCUMENTS = 2000  # documents analyzed when one file is split into many
 
 
 class Adapter:
@@ -153,8 +160,13 @@ def file_pipeline_script(
     helpers: Any,
     imports: str,
     export_call: str,
+    rerun: str = "",
 ) -> str:
     """cleaning_pipeline.py for folder datasets: build the file table, clean, export."""
+    rerun = rerun or (
+        f"Rerun it on the full {kind} folder (class = first folder level):\n"
+        f"    python cleaning_pipeline.py path/to/{kind} cleaned_{kind}"
+    )
     steps = []
     for s in run.steps:
         comment = f"    # Step {s.index}: {s.op} [{s.risk}] - {s.rationale}".replace("\n", " ")
@@ -165,8 +177,7 @@ def file_pipeline_script(
 Source: {source}
 Plan: {plan.summary}
 
-Rerun it on the full {kind} folder (class = first folder level):
-    python cleaning_pipeline.py path/to/{kind} cleaned_{kind}
+{rerun}
 """
 
 {imports}
@@ -594,7 +605,237 @@ class AudioAdapter(Adapter):
         return list(self.raw.spectrograms)
 
 
+# ---------------------------------------------------------------- text
+
+
+def text_pipeline_script(plan: CleaningPlan, run: PlanRun, source: str) -> str:
+    return file_pipeline_script(
+        plan,
+        run,
+        source,
+        kind="text",
+        helpers=text_helpers,
+        export_call="export_text",
+        imports="import hashlib\nimport html\nimport json\nimport re\nimport sys\n"
+        "import unicodedata\nfrom pathlib import Path\n\nimport numpy as np\nimport pandas as pd",
+        rerun="Rerun it on the full data (a folder of .txt files, class = first folder level,\n"
+        "or a single .txt file, split into paragraphs, lines, or transcript turns):\n"
+        "    python cleaning_pipeline.py path/to/text cleaned_text",
+    )
+
+
+STRUCTURES = {
+    "corpus": "one document per file",
+    "paragraphs": "one file split into paragraphs",
+    "lines": "one file, one document per line",
+    "transcript": "a transcript, one document per speaker turn",
+}
+
+
+class TextAdapter(Adapter):
+    modality = "text"
+    unit = "documents"
+    crew_cls = TextCrew
+
+    def load(self, manifest: FileManifest) -> str:
+        texts = manifest.files_of(Modality.TEXT)
+        files = [f for f in texts if f.format != "log"]
+        if len(files) < len(texts):
+            self.notes.append(f"Skipped {len(texts) - len(files)} log file(s) inside the corpus.")
+        self.root = Path(manifest.root)
+        if len(files) == 1:
+            self.source = self.root / files[0].path
+            self.structure = text_helpers.detect_structure(text_helpers.read_text(self.source))
+            df = text_helpers.build_table(self.source)
+            self.total = len(df)
+            if len(df) > MAX_DOCUMENTS:  # evenly spaced, so the whole file is represented
+                keep = sorted(set(np.linspace(0, len(df) - 1, MAX_DOCUMENTS).astype(int)))
+                df = df.iloc[keep].reset_index(drop=True)
+                self.notes.append(
+                    f"Analyzed {len(df)} evenly spaced documents of {self.total} in the file."
+                )
+        else:
+            self.structure = "corpus"
+            self.total = len(files)
+            sample = stratified_sample(files, Modality.TEXT, self.rt.settings.max_sampled_files)
+            if sample.is_sample:
+                self.notes.append(
+                    f"Analyzed a stratified sample of {len(sample.files)} of "
+                    f"{self.total} documents (by folder)."
+                )
+            tops = {f.path.split("/")[0] for f in files}
+            if len(tops) == 1 and all(f.path.count("/") >= 2 for f in files):
+                wrapper = tops.pop()
+                self.root = self.root / wrapper
+                rel = [(f.path[len(wrapper) + 1 :], f.group) for f in sample.files]
+            else:
+                rel = [(f.path, f.group) for f in sample.files]
+            self.source = self.root
+            df = text_helpers.build_table(self.root, rel)
+        if df.empty or not df["text"].str.strip().any():
+            raise ValueError("The text files are empty.")
+        self.df = df
+        labels = len({c for c in df["class"] if c})
+        label_word = "speakers" if self.structure == "transcript" else "labels"
+        return f"{self.total} documents ({STRUCTURES[self.structure]})" + (
+            f" with {labels} {label_word}" if labels else ""
+        )
+
+    def profile_raw(self, goal: str) -> tuple[float, str | None, int]:
+        self.raw: TextProfile = profile_text(
+            self.df, self.rt.store, structure=self.structure, total_docs=self.total
+        )
+        self.chart_ids = list(self.raw.chart_ids)
+        self._read()
+        return self.raw.quality, None, len(self.df)
+
+    def _read(self) -> None:
+        reporter = self.rt.reporter
+        picks = pick_documents(list(self.df["path"]), self.raw.categories, self.raw.mismatches)
+        rows = self.df.set_index("path").loc[picks]
+        docs = [(p, str(r["class"]), str(r["text"])) for p, r in rows.iterrows()]
+        reporter.emit("step", "Reading review", f"{len(docs)} documents in one request")
+        try:
+            read_id = reading_review(
+                self.rt.store,
+                docs,
+                tracker=self.rt.tracker,
+                route=self.rt.routes["default"],
+                api_key=self.rt.api_key,
+                on_event=self.rt._on_call,
+                client_factory=self.rt.client_factory,
+            )
+        except Exception as exc:
+            self.notes.append("The reading review couldn't run.")
+            reporter.emit("info", "Reading review skipped", str(exc)[:300], "warning")
+            return
+        if read_id:
+            self.raw.artifact_ids.append(read_id)
+            reporter.emit("step", "Reading review done", "", "done")
+
+    @property
+    def guard_df(self) -> pd.DataFrame:
+        return self.df
+
+    @property
+    def columns(self) -> list[str]:
+        return []
+
+    def execute(self, plan: CleaningPlan) -> PlanRun:
+        return execute_plan(
+            plan,
+            self.df,
+            self.rt.store,
+            catalog=TEXT_OPS,
+            namespace=text_namespace(),
+            unit="documents",
+        )
+
+    def post_checks(self, run: PlanRun) -> list[str]:
+        before = self.df.groupby("class").size()
+        after = run.df.groupby("class").size().reindex(before.index, fill_value=0)
+        return [
+            f"The plan removes {1 - after[c] / before[c]:.0%} of label '{c}' ({before[c]} -> "
+            f"{after[c]}). Use a gentler threshold or flag instead of dropping."
+            for c in before.index
+            if c and before[c] >= 5 and after[c] < before[c] * (1 - MAX_CLASS_LOSS)
+        ]
+
+    def catalog(self) -> str:
+        return catalog_text(TEXT_OPS)
+
+    def conservative_plan(self) -> CleaningPlan:
+        return CleaningPlan(
+            summary="Safe-only fallback plan: repair encoding and markup, tidy whitespace, "
+            "and remove empty documents. Nothing else is removed.",
+            ops=[
+                CleaningOp(op="fix_encoding", rationale="Garbled characters."),
+                CleaningOp(op="strip_html", rationale="Leftover markup."),
+                CleaningOp(op="normalize_whitespace", rationale="Consistent spacing."),
+                CleaningOp(
+                    op="drop_short_documents",
+                    params={"min_words": 1},
+                    rationale="Empty documents.",
+                    evidence=[self.raw.artifact_ids[1]],
+                ),
+            ],
+        )
+
+    def apply(self, plan: CleaningPlan, run: PlanRun) -> tuple[dict[str, str], float, int]:
+        out = self.rt.ws.out
+        folder = self.rt.ws.work / "cleaned_text"
+        text_helpers.export_text(run.df, self.source, folder)
+        shutil.copy(folder / "cleaned_documents.jsonl", out / "cleaned_documents.jsonl")
+        shutil.copy(folder / "text_manifest.csv", out / "text_manifest.csv")
+        (out / "cleaning_pipeline.py").write_text(
+            text_pipeline_script(plan, run, self.rt.ws.input.name), encoding="utf-8"
+        )
+        self.clean = profile_text(
+            run.df,
+            self.rt.store,
+            structure=self.structure,
+            total_docs=len(run.df),
+            stage="clean",
+        )
+        self.chart_ids += self.clean.chart_ids[:1]
+        outputs = {
+            "cleaned": str(out / "cleaned_documents.jsonl"),
+            "manifest": str(out / "text_manifest.csv"),
+            "pipeline": str(out / "cleaning_pipeline.py"),
+        }
+        return outputs, self.clean.quality, len(run.df)
+
+    def report_extras(self) -> dict[str, Any]:
+        store = self.rt.store
+
+        def first(prefix: str) -> dict | None:
+            return next((a.data for a in store.all("profile") if a.id == f"{prefix}_001"), None)
+
+        samples = [
+            {"document": p, "label": c, "text": snippet(t, 160)}
+            for p, c, t in self.df[["path", "class", "text"]].head(8).itertuples(index=False)
+        ]
+        return {
+            "balance": first("txt_balance"),
+            "text": {
+                "labels": first("txt_labels"),
+                "topics": first("txt_topics"),
+                "terms": first("txt_terms"),
+                "pii": first("txt_pii"),
+                "boilerplate": first("txt_boilerplate"),
+                "read": first("txt_read"),
+                "samples": samples,
+            },
+        }
+
+    def gallery(self) -> list[tuple[str, str]]:
+        return []
+
+
+class LogAdapter(TableAdapter):
+    """Logs are parsed into a table (one row per record) and analyzed by the Table crew."""
+
+    def load(self, manifest: FileManifest) -> str:
+        logs = sorted(manifest.files_of(Modality.TEXT), key=lambda f: -f.size)
+        if len(logs) > 1:
+            self.notes.append(
+                f"Found {len(logs)} log files; analyzing the largest, '{logs[0].path}'."
+            )
+        self.table = load_table(Path(manifest.root) / logs[0].path, "log")
+        if self.table.df.empty:
+            raise ValueError("No log records could be parsed from the file.")
+        self.notes.extend(self.table.notes)
+        style = self.table.df.attrs.get("log_format", "")
+        return (
+            f"{logs[0].path}: a {style} log parsed into {len(self.table.df):,} records x "
+            f"{self.table.df.shape[1]} fields"
+        )
+
+
 def make_adapter(manifest: FileManifest, rt: JobRuntime) -> Adapter | None:
+    if manifest.dominant == Modality.TEXT:
+        texts = manifest.files_of(Modality.TEXT)
+        return LogAdapter(rt) if all(f.format == "log" for f in texts) else TextAdapter(rt)
     adapters = {
         Modality.TABLE: TableAdapter,
         Modality.IMAGE: ImageAdapter,

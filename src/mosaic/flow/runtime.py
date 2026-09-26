@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -9,7 +10,7 @@ from mosaic.config import Settings
 from mosaic.events.reporter import RunReporter
 from mosaic.evidence.store import EvidenceStore
 from mosaic.llm.pooled_llm import PooledLLM
-from mosaic.llm.quota import PoolRule, QuotaTracker
+from mosaic.llm.quota import DeadlineTracker, PoolRule, QuotaTracker
 from mosaic.llm.routing import build_routes
 from mosaic.workspace import JobWorkspace
 
@@ -30,6 +31,13 @@ class JobRuntime:
     def __post_init__(self) -> None:
         self.store = self.store or EvidenceStore(self.ws.artifacts)
         self.routes = self.routes or build_routes(self.settings)
+        if not isinstance(self.tracker, DeadlineTracker):  # bound every model call in this job
+            self.tracker = DeadlineTracker(
+                self.tracker, time.time() + self.settings.max_job_seconds
+            )
+
+    def expired(self) -> bool:
+        return self.tracker.left() <= 0
 
     def _on_call(self, info: dict) -> None:
         if info["ok"]:

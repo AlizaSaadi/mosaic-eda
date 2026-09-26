@@ -17,8 +17,8 @@ short_description: Agents that clean, explore, and fact-check any dataset
 A crew of AI agents, built with [CrewAI](https://www.crewai.com/), that cleans, explores, and
 fact-checks any dataset: tables, text, images, audio, and video, or a zip of them.
 
-> Status: tables, image, and audio datasets work end to end, with review and revision
-> loops (Phase 5). Text and video are next.
+> Status: tables, text (documents, transcripts, and logs), images, and audio work end to
+> end, with review and revision loops (Phase 6). Video is next.
 > The full design is in [`docs/MOSAIC-EDA-Blueprint.pdf`](docs/MOSAIC-EDA-Blueprint.pdf).
 
 ## How it works (short version)
