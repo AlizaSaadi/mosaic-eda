@@ -504,7 +504,8 @@ def build_app() -> gr.Blocks:
                     if replays:
                         gr.Markdown("Or watch a recorded run (no quota needed):")
                         replay_btns = [
-                            (gr.Button(label, size="sm"), name) for name, label in replays
+                            (gr.Button(f"Replay: {label}", size="sm"), name)
+                            for name, label in replays
                         ]
                     runs_left = gr.Markdown(runs_left_text(settings))
             with gr.Group(visible=False) as choice_panel:
