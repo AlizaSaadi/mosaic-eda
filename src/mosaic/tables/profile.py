@@ -7,6 +7,7 @@ and cite the artifact IDs.
 from __future__ import annotations
 
 import re
+import warnings
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -14,7 +15,10 @@ import pandas as pd
 
 from mosaic.evidence.store import EvidenceStore
 from mosaic.reporting import charts
+from mosaic.security.injection import PATTERN as INJECTION
+from mosaic.security.scan import record_injection_scan
 from mosaic.tables.load import LoadedTable
+from mosaic.tables.logs import record_log_facts
 from mosaic.tables.semantics import (
     ColumnType,
     detect_type,
@@ -347,6 +351,24 @@ def profile_table(
         {"stage": stage},
     )
     result.artifact_ids.append(a.id)
+
+    # text that tries to instruct an AI (a quick vectorized pass, then only matches)
+    flagged = []
+    for col in df.columns:
+        values = df[col]
+        if pd.api.types.is_numeric_dtype(values):
+            continue
+        with warnings.catch_warnings():  # pandas notes the groups; only a yes/no is needed
+            warnings.simplefilter("ignore", UserWarning)
+            hit = values.astype(str).str.contains(INJECTION, na=False)
+        flagged += [(f"row {i + 1} of '{col}'", values.iloc[i]) for i in np.flatnonzero(hit)]
+    if table.format == "log":  # silences and error bursts
+        log_id = record_log_facts(store, df, stage)
+        if log_id:
+            result.artifact_ids.append(log_id)
+    scan = record_injection_scan(store, flagged, "cells", stage)
+    if scan:
+        result.artifact_ids.append(scan)
 
     result.chart_ids = _charts(df, types, columns, store, stage)
     return result

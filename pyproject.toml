@@ -1,6 +1,6 @@
 [project]
 name = "mosaic-eda"
-version = "0.9.3"
+version = "0.10.0"
 description = "MOSAIC EDA: Multimodal Orchestrated System for Analysis, Inspection & Cleaning"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -36,3 +36,5 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 "src/mosaic/tables/ops.py" = ["UP031"]
 # SVG path data reads best on one line
 "src/mosaic/ui/art.py" = ["E501"]
+# ground truth: one planted problem per line, patterns kept whole
+"eval/golden.py" = ["E501"]

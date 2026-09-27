@@ -62,6 +62,18 @@ IDENTIFIER = re.compile(r"\b[A-Za-z][A-Za-z0-9]*[-_][\w.-]*\d[\w.-]*")
 SCALE = re.compile(r"(?:/|\bout of\s+|\bof\s+)100\b", re.I)
 
 
+def numbers_in(finding: dict) -> int:
+    """How many distinct numbers a finding states: its declared metrics, plus numbers
+    written only in the sentence (the fact check verifies both)."""
+    claimed = [m["value"] for m in finding.get("claimed_metrics", [])]
+    extra = [
+        v
+        for v in statement_numbers(finding.get("statement", ""))
+        if not any(close(v, c) or close(v, round(c, 2)) for c in claimed)
+    ]
+    return len(claimed) + len(set(extra))
+
+
 def statement_numbers(text: str) -> list[float]:
     """Numbers a reader would take as facts. Small counts (under 10), years, and scale
     denominators ("91.6 out of 100", "79.7/100") are exempt."""

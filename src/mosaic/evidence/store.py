@@ -18,6 +18,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from mosaic.security.injection import neutralize
+
 
 class Artifact(BaseModel):
     id: str
@@ -73,6 +75,7 @@ class EvidenceStore:
         data: dict[str, Any],
         params: dict[str, Any] | None = None,
     ) -> Artifact:
+        summary = neutralize(summary)  # agents read summaries; data text is untrusted
         with self._lock:
             self._counters[prefix] += 1
             artifact_id = f"{prefix}_{self._counters[prefix]:03d}"

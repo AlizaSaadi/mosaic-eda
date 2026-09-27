@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 from mosaic.evidence.store import EvidenceStore
+from mosaic.security import injection
 from mosaic.tables import pipeline_helpers
 from mosaic.tables.load import LoadedTable
 from mosaic.tables.ops import OPS, CleaningPlan, Risk, op_code, run_code
@@ -105,6 +106,16 @@ def describe_change(before: pd.DataFrame, after: pd.DataFrame, unit: str = "rows
         parts.append(f"added {_count(-removed, unit)}")
     new_cols = [c for c in after.columns if c not in before.columns]
     gone_cols = [c for c in before.columns if c not in after.columns]
+    renamed = []
+    if len(before.columns) == len(after.columns) and len(before) == len(after):
+        for old, new in zip(before.columns, after.columns, strict=True):
+            if old != new and old in gone_cols and new in new_cols:
+                renamed.append(f"{old} -> {new}")
+                gone_cols.remove(old)
+                new_cols.remove(new)
+    if renamed:
+        more = f" and {len(renamed) - 4} more" if len(renamed) > 4 else ""
+        parts.append(f"renamed columns {', '.join(renamed[:4])}{more}")
     if gone_cols:
         parts.append("removed column(s) " + ", ".join(map(str, gone_cols[:MAX_COLUMNS_LISTED])))
     pair = _aligned(before, after)
@@ -332,10 +343,11 @@ import re
 import sys
 
 import numpy as np
-import numpy as np
 import pandas as pd
 
 {helpers_source()}
+
+{helpers_source(injection)}
 
 
 def load(path):

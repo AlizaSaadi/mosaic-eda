@@ -337,3 +337,31 @@ def test_each_cleaning_step_says_what_it_changed():
     kept = files[~files["corrupt"]].reset_index(drop=True)
     assert describe_change(files, kept, "images") == "Removed 1 image (a/2.jpg)."
     assert describe_change(files, files).startswith("Nothing needed changing")
+
+
+def test_published_findings_count_numbers_written_in_the_sentence_too():
+    from mosaic.guardrails.task_guardrails import numbers_in
+
+    sentence_only = {"statement": "Ages include -3.0 and 212.0, with a skew of 3.58."}
+    declared = {
+        "statement": "Revenue has a skew of 19.21.",
+        "claimed_metrics": [{"key": "revenue.skew", "value": 19.2144}],
+    }
+    assert numbers_in(sentence_only) == 3 and numbers_in(declared) == 1
+
+
+def test_european_numbers_and_dates_are_read_correctly():
+    from mosaic.tables.cleaning import describe_change
+    from mosaic.tables.pipeline_helpers import to_datetime, to_number
+
+    assert to_number(pd.Series(["2.167,60 EUR", "318,96 EUR"])).tolist() == [2167.6, 318.96]
+    assert to_number(pd.Series(["15,0", "5,0%"])).tolist() == [15.0, 5.0]
+    assert to_number(pd.Series(["$1,192.90", "$11.60"])).tolist() == [1192.9, 11.6]
+    assert to_number(pd.Series(["1,234"])).tolist() == [1234]  # ambiguous: the US reading
+    assert to_number(pd.Series(["1.234"]), decimal_comma=True).tolist() == [1234]  # as asked
+    days = to_datetime(pd.Series(["02.03.2025", "18.11.2025"])).dt.strftime("%m-%d").tolist()
+    assert days == ["03-02", "11-18"]
+    us = to_datetime(pd.Series(["03/25/2025", "04/02/2025"])).dt.strftime("%m-%d").tolist()
+    assert us == ["03-25", "04-02"]
+    renamed = describe_change(pd.DataFrame({"A B": [1]}), pd.DataFrame({"a_b": [1]}))
+    assert renamed == "Renamed columns A B -> a_b."

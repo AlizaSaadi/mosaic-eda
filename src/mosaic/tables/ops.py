@@ -18,6 +18,7 @@ import pandas as pd
 from pydantic import BaseModel, Field, ValidationError, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
+from mosaic.security import injection
 from mosaic.tables import pipeline_helpers
 
 
@@ -32,12 +33,19 @@ class NoParams(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+def _forced(flag: bool | None) -> bool | None:
+    """Agents often send false for every option they don't care about, so only true is a
+    decision; otherwise the helpers work the format out from the values."""
+    return True if flag else None
+
+
 class NumberParams(NoParams):
-    decimal_comma: bool = False
+    # None: worked out from the values ('2.167,60' vs '2,167.60')
+    decimal_comma: bool | None = None
 
 
 class DateParams(NoParams):
-    dayfirst: bool = False
+    dayfirst: bool | None = None  # None: worked out from the values (25.12.2025 vs 12/25/2025)
 
 
 class CaseParams(NoParams):
@@ -91,6 +99,16 @@ _op(
 )
 _op(
     OpSpec(
+        "mask_injection_text",
+        Risk.LOSSY,
+        "Replace text written to instruct an AI (prompt injection) with a marker, so the "
+        "cleaned data is safe to give to language models.",
+        NoParams,
+        lambda c, p: _each(c, "df[{c}] = df[{c}].map(neutralize)"),
+    )
+)
+_op(
+    OpSpec(
         "trim_whitespace",
         Risk.SAFE,
         "Remove spaces around text values.",
@@ -114,7 +132,9 @@ _op(
         Risk.SAFE,
         "Convert amounts like '$1,204.50' to numbers.",
         NumberParams,
-        lambda c, p: _each(c, "df[{c}] = to_number(df[{c}], decimal_comma=%r)" % p.decimal_comma),
+        lambda c, p: _each(
+            c, "df[{c}] = to_number(df[{c}], decimal_comma=%r)" % _forced(p.decimal_comma)
+        ),
     )
 )
 _op(
@@ -132,7 +152,9 @@ _op(
         Risk.SAFE,
         "Convert text numbers to numbers (unparseable -> missing).",
         NumberParams,
-        lambda c, p: _each(c, "df[{c}] = to_number(df[{c}], decimal_comma=%r)" % p.decimal_comma),
+        lambda c, p: _each(
+            c, "df[{c}] = to_number(df[{c}], decimal_comma=%r)" % _forced(p.decimal_comma)
+        ),
     )
 )
 _op(
@@ -141,7 +163,7 @@ _op(
         Risk.SAFE,
         "Convert text dates in any common format to dates.",
         DateParams,
-        lambda c, p: _each(c, "df[{c}] = to_datetime(df[{c}], dayfirst=%r)" % p.dayfirst),
+        lambda c, p: _each(c, "df[{c}] = to_datetime(df[{c}], dayfirst=%r)" % _forced(p.dayfirst)),
     )
 )
 _op(
@@ -385,6 +407,7 @@ def op_code(
 def helper_namespace() -> dict[str, Any]:
     ns: dict[str, Any] = {"pd": pd, "re": re}
     ns.update({k: v for k, v in vars(pipeline_helpers).items() if not k.startswith("_")})
+    ns.update({k: v for k, v in vars(injection).items() if not k.startswith("_")})
     return ns
 
 

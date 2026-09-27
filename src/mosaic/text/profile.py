@@ -18,6 +18,7 @@ import pandas as pd
 
 from mosaic.evidence.store import EvidenceStore
 from mosaic.reporting import charts
+from mosaic.security.scan import record_injection_scan
 from mosaic.tables.profile import r4
 from mosaic.text.pipeline_helpers import (
     STOPWORDS,
@@ -250,6 +251,11 @@ def profile_text(
     labels = [str(c) for c in df["class"].fillna("")]
     labelled = {k: v for k, v in Counter(labels).items() if k}
     label_word = "speaker" if structure == "transcript" else "label"
+    scan = record_injection_scan(
+        store, zip(df["path"], df["text"], strict=False), "documents", stage
+    )
+    if scan:
+        result.artifact_ids.append(scan)
 
     # overview
     token_lists = [[w.lower() for w in words(t)] for t in df["text"].fillna("")]

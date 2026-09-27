@@ -13,6 +13,7 @@ import pandas as pd
 from pydantic import Field, field_validator
 
 from mosaic.images.ops import _CHECK_FILES
+from mosaic.security import injection
 from mosaic.tables.ops import NoParams, OpSpec, Risk
 from mosaic.text import pipeline_helpers
 
@@ -78,6 +79,13 @@ _op(
     "Repair garbled characters from a wrong encoding ('cafÃ©' -> 'café').",
     NoParams,
     lambda c, p: "df['text'] = df['text'].map(fix_mojibake)",
+)
+_op(
+    "mask_injection_text",
+    Risk.LOSSY,
+    "Replace text written to instruct an AI (prompt injection) with a marker.",
+    NoParams,
+    lambda c, p: "df['text'] = df['text'].map(neutralize)",
 )
 _op(
     "normalize_unicode",
@@ -187,4 +195,5 @@ _op(
 def text_namespace() -> dict[str, Any]:
     ns: dict[str, Any] = {"pd": pd}
     ns.update({k: v for k, v in vars(pipeline_helpers).items() if not k.startswith("_")})
+    ns.update({k: v for k, v in vars(injection).items() if not k.startswith("_")})
     return ns

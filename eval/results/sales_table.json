@@ -1,0 +1,216 @@
+{
+ "dataset": "sales_table",
+ "date": "2026-09-27",
+ "status": "done",
+ "error": "",
+ "modality": "table",
+ "seconds": 41,
+ "counters": {
+  "tool_runs": 18,
+  "model_calls": 6,
+  "llm_calls": 6,
+  "fallbacks": 4,
+  "guardrail_catches": 1,
+  "self_corrections": 1,
+  "facts_verified": 10,
+  "review_rounds": 1
+ },
+ "revisions": 0,
+ "fact_check_rejections": 0,
+ "first_findings_passed": true,
+ "items_before": 412,
+ "items_after": 400,
+ "quality_raw": 79.7,
+ "quality_clean": 100.0,
+ "findings": [
+  {
+   "title": "Exact duplicate rows detected in raw data",
+   "statement": "The raw dataset contained 12 exact duplicate rows, representing 2.91% of the original 412 records.",
+   "severity": "warning",
+   "recommendation": "Remove exact duplicates prior to model training to avoid data leakage and bias."
+  },
+  {
+   "title": "Severe data leakage in refund amount",
+   "statement": "The refund_amount column separates the target variable churned almost perfectly with an AUC value of 1.0.",
+   "severity": "critical",
+   "recommendation": "Exclude refund_amount from feature sets for predictive modeling of customer churn."
+  },
+  {
+   "title": "Missing values and hidden tokens in region",
+   "statement": "The region column had 10.68% missing values along with 44 hidden-missing tokens and case variants.",
+   "severity": "warning",
+   "recommendation": "Standardize categorical text formatting and apply missingness indicators or mode imputation."
+  },
+  {
+   "title": "Heavy right-skewness and outliers in revenue",
+   "statement": "Revenue exhibits a high skew of 19.21 and contains 76 IQR outliers across the distribution.",
+   "severity": "warning",
+   "recommendation": "Apply logarithmic transformations or robust scaling to mitigate the influence of extreme revenue values."
+  },
+  {
+   "title": "Target class imbalance in dataset",
+   "statement": "The target variable churned shows a class balance of 75.24% for no and 24.76% for yes.",
+   "severity": "info",
+   "recommendation": "Account for class imbalance using appropriate evaluation metrics like ROC-AUC or balancing techniques."
+  },
+  {
+   "title": "Data quality score improvement post-cleaning",
+   "statement": "The data quality score increased from 79.7 out of 100 in the raw dataset to 100.0 out of 100 in the cleaned dataset.",
+   "severity": "info",
+   "recommendation": "Use the fully cleaned dataset for downstream exploratory analysis and predictive modeling."
+  }
+ ],
+ "narrative": {
+  "headline": "Dataset cleaned and prepared for churn prediction after resolving critical data leakage and quality issues.",
+  "executive_summary": "The raw dataset had a quality score of 79.7 out of 100 before cleaning and improved to 100.0 out of 100 after cleaning. We removed 12 exact duplicate rows, representing 2.91% of the original 412 records, and dropped the refund_amount column because it caused severe data leakage with an AUC value of 1.0. The target variable churned exhibits a class balance of 75.24% for no and 24.76% for yes. Additionally, we handled 10.68% missing values in the region column and addressed 76 IQR outliers in revenue, which has a skew of 19.21.",
+  "next_steps": [
+   "Train baseline classification models using the cleaned dataset of 400 records.",
+   "Account for the target class imbalance of 75.24% to 24.76% during model training.",
+   "Evaluate feature importance while ensuring no additional data leakage occurs.",
+   "Monitor the handling of revenue outliers and their impact on model performance."
+  ]
+ },
+ "notes": [],
+ "cleaning": [
+  {
+   "op": "standardize_null_tokens",
+   "description": "Turn missing-value tokens ('N/A', '-', '?', 'null', '') into real missing values.",
+   "changes": "Changed 44 values in 'region', all now missing (e.g. 'N/A' \u2192 (missing)); changed 74 values in 'quantity', all now missing (e.g. '-' \u2192 (missing); '?' \u2192 (missing); 'N/A' \u2192 (missing)); changed 412 values in 'notes', all now missing (e.g. '' \u2192 (missing)).",
+   "rationale": "Standardize all hidden missing tokens across the dataset.",
+   "columns": []
+  },
+  {
+   "op": "parse_dates",
+   "description": "Convert text dates in any common format to dates.",
+   "changes": "Converted 'order_date' to dates; changed 278 values in 'order_date' (e.g. '22 Dec 2025' \u2192 2025-12-22; '04 May 2025' \u2192 2025-05-04; '12/02/2025' \u2192 2025-12-02).",
+   "rationale": "Convert order_date to datetime format.",
+   "columns": [
+    "order_date"
+   ]
+  },
+  {
+   "op": "strip_currency",
+   "description": "Convert amounts like '$1,204.50' to numbers.",
+   "changes": "Converted 'unit_price' to numbers; changed 412 values in 'unit_price' (e.g. '$1,192.90' \u2192 1192.9; '$11.60' \u2192 11.6; '$11.40' \u2192 11.4).",
+   "rationale": "Convert currency formatted unit_price to numeric type before outlier operations.",
+   "columns": [
+    "unit_price"
+   ]
+  },
+  {
+   "op": "cast_numeric",
+   "description": "Convert text numbers to numbers (unparseable -> missing).",
+   "changes": "Converted 'quantity' to numbers; converted 'revenue' to numbers; changed 38 values in 'revenue' (e.g. '919.50' \u2192 919.5; '9010.50' \u2192 9010.5; '305.90' \u2192 305.9).",
+   "rationale": "Convert quantity and revenue from text to numeric so mathematical operations and imputations can succeed.",
+   "columns": [
+    "quantity",
+    "revenue"
+   ]
+  },
+  {
+   "op": "normalize_case",
+   "description": "Make text consistent in case, so 'north', 'North', and 'NORTH' become one value.",
+   "changes": "Changed 198 values in 'region' (e.g. 'south' \u2192 'South'; 'north' \u2192 'North'; 'North ' \u2192 'North').",
+   "rationale": "Standardize region text case variants to title case.",
+   "columns": [
+    "region"
+   ]
+  },
+  {
+   "op": "parse_boolean",
+   "description": "Convert yes/no, true/false, 1/0 to booleans.",
+   "changes": "Converted 'churned' to true/false; changed 412 values in 'churned' (e.g. 'no' \u2192 False; 'yes' \u2192 True).",
+   "rationale": "Ensure target column churned is properly parsed as boolean.",
+   "columns": [
+    "churned"
+   ]
+  },
+  {
+   "op": "mark_as_id",
+   "description": "Mark identifier columns so they're left out of statistics.",
+   "changes": "Nothing needed changing: the data already met this rule.",
+   "rationale": "Mark order_id as an identifier column.",
+   "columns": [
+    "order_id"
+   ]
+  },
+  {
+   "op": "drop_empty_columns",
+   "description": "Drop columns with no values at all.",
+   "changes": "Removed column(s) notes.",
+   "rationale": "Drop columns with no values at all.",
+   "columns": []
+  },
+  {
+   "op": "drop_constant_columns",
+   "description": "Drop columns that hold a single value.",
+   "changes": "Removed column(s) currency.",
+   "rationale": "Drop constant columns that hold a single value.",
+   "columns": []
+  },
+  {
+   "op": "drop_columns",
+   "description": "Drop specific columns, for example a column that leaks the target.",
+   "changes": "Removed column(s) refund_amount.",
+   "rationale": "Drop refund_amount because it leaks the target variable churned.",
+   "columns": [
+    "refund_amount"
+   ]
+  },
+  {
+   "op": "drop_exact_duplicates",
+   "description": "Remove rows that are exact copies.",
+   "changes": "Removed 12 rows.",
+   "rationale": "Remove exact duplicate rows to maintain data integrity.",
+   "columns": []
+  },
+  {
+   "op": "add_missing_indicator",
+   "description": "Add a <column>_was_missing flag before imputing, so the information isn't lost.",
+   "changes": "Marked 43 rows in a new 'region_was_missing' column; marked 74 rows in a new 'quantity_was_missing' column.",
+   "rationale": "Add missing indicators before imputation since missingness exceeds 5%.",
+   "columns": [
+    "region",
+    "quantity"
+   ]
+  },
+  {
+   "op": "impute_mode",
+   "description": "Fill missing values with the most common value.",
+   "changes": "Changed 43 values in 'region' (e.g. (missing) \u2192 'North').",
+   "rationale": "Impute missing categorical values in region using the mode.",
+   "columns": [
+    "region"
+   ]
+  },
+  {
+   "op": "impute_median",
+   "description": "Fill missing numbers with the column median.",
+   "changes": "Changed 74 values in 'quantity' (e.g. (missing) \u2192 11).",
+   "rationale": "Impute missing numeric values in quantity using the median.",
+   "columns": [
+    "quantity"
+   ]
+  },
+  {
+   "op": "flag_outliers",
+   "description": "Add a <column>_outlier flag using the 1.5 x IQR rule.",
+   "changes": "Marked 93 rows in a new 'unit_price_outlier' column; marked 74 rows in a new 'revenue_outlier' column.",
+   "rationale": "Flag heavy-tailed outliers in unit_price and revenue using the 1.5x IQR rule.",
+   "columns": [
+    "unit_price",
+    "revenue"
+   ]
+  },
+  {
+   "op": "standardize_column_names",
+   "description": "Rename columns to snake_case. Put this last: later steps would need the new names.",
+   "changes": "Nothing needed changing: the data already met this rule.",
+   "rationale": "Rename columns to snake_case as the final step.",
+   "columns": []
+  }
+ ],
+ "checks": {
+  "title_row": true
+ }
+}

@@ -18,7 +18,7 @@ HARVEST = {
         "#B5471B",
         "#2F6F73",
         "#A57A00",
-        "#7A3E65",
+        "#9A5585",
         "#5E7F33",
         "#4E6E9E",
         "#B8604F",
@@ -32,11 +32,14 @@ HARVEST = {
 COLOR_BLIND_SAFE = {
     **HARVEST,
     "accent": "#C0470A",
+    # the first four are chosen for color blindness (tests/unit/test_palette.py): the two
+    # shown together stay far apart for every type, and all four keep 3:1 contrast on the
+    # light and dark backgrounds
     "chart": [
-        "#C0470A",
+        "#D55E00",
         "#0072B2",
-        "#A57A00",
-        "#CC79A7",
+        "#17A173",
+        "#BB1B86",
         "#009E73",
         "#56B4E9",
         "#8A6440",

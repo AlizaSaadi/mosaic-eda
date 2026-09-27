@@ -36,6 +36,7 @@ from mosaic.images.profile import ImageProfile, profile_images
 from mosaic.images.vision import vision_review
 from mosaic.ingest.models import FileManifest, Modality
 from mosaic.ingest.sampler import stratified_sample
+from mosaic.security import injection
 from mosaic.tables.cleaning import (
     PlanRun,
     conservative_plan,
@@ -167,6 +168,8 @@ def file_pipeline_script(
     rerun: str = "",
 ) -> str:
     """cleaning_pipeline.py for folder datasets: build the file table, clean, export."""
+    if "import re\n" not in imports:  # the prompt-injection helper uses it
+        imports = "import re\n" + imports
     rerun = rerun or (
         f"Rerun it on the full {kind} folder (class = first folder level):\n"
         f"    python cleaning_pipeline.py path/to/{kind} cleaned_{kind}"
@@ -187,6 +190,8 @@ Plan: {plan.summary}
 {imports}
 
 {helpers_source(helpers)}
+
+{helpers_source(injection)}
 
 
 def clean(df):

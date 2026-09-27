@@ -26,7 +26,7 @@ from mosaic.crews.mixed.crew import MixedCrew
 from mosaic.flow.adapters import Adapter, make_adapter
 from mosaic.flow.group import bundle, group_chart, part_chart_ids, record_group, run_parts
 from mosaic.flow.runtime import JobRuntime
-from mosaic.guardrails.task_guardrails import GuardContext, parse_output
+from mosaic.guardrails.task_guardrails import GuardContext, numbers_in, parse_output
 from mosaic.ingest.models import ANALYZABLE, FileManifest, IngestError, count_label
 from mosaic.ingest.service import ingest
 from mosaic.llm.quota import JobTimeout, QuotaExhausted
@@ -73,7 +73,7 @@ class EDAState(FlowState):
     parts: list[dict[str, Any]] = Field(default_factory=list)
     share: bool = False  # opt-in: save a public copy of the report
     share_urls: dict[str, str] = Field(default_factory=dict)
-    # what each cleaning step did: {"op", "description", "changes", "rationale"}
+    # what each cleaning step did: {"op", "columns", "description", "changes", "rationale"}
     cleaning: list[dict[str, Any]] = Field(default_factory=list)
 
 
@@ -717,7 +717,7 @@ class EDAFlow(Flow[EDAState]):
             self._fail("No findings passed both the fact check and the review.")
             return
         # Every published finding passed the fact check, so count exactly what's shown
-        shown = sum(len(f["claimed_metrics"]) for f in self.state.findings)
+        shown = sum(numbers_in(f) for f in self.state.findings)
         self._guard.verified = shown
         self._rt.reporter.counters["facts_verified"] = shown
         missed = (self.state.review or {}).get("missed") or []
@@ -811,7 +811,7 @@ class EDAFlow(Flow[EDAState]):
         charts = [self._rt.store.get(cid).data["figure"] for cid in self._adapter.chart_ids[:8]]
         self.state.cleaning = [
             {"op": s.op, "description": s.description, "changes": s.changes,
-             "rationale": s.rationale}
+             "rationale": s.rationale, "columns": list(s.columns)}
             for s in run.steps
         ]  # fmt: skip
         self._write_reports(

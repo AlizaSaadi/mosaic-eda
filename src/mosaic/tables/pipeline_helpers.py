@@ -19,10 +19,22 @@ def is_missing(s):
     return s.isna() | s.astype("str").str.strip().str.lower().isin(NULL_TOKENS)
 
 
-def to_number(s, decimal_comma=False):
-    """Parse numbers, currency, and percentages ('$1,204.50', '10%') to floats."""
+def uses_decimal_comma(text):
+    """True when the values are written the European way ('2.167,60', '159,48'): more
+    values can only be read that way than can only be read the US way ('1,192.90')."""
+    text = text.dropna().astype("str")
+    european = text.str.fullmatch(r"-?\d{1,3}(\.\d{3})+,\d+|-?\d+,\d{1,2}|-?\d+,\d{4,}")
+    us = text.str.fullmatch(r"-?\d{1,3}(,\d{3})+\.\d+|-?\d+\.\d+|-?\d{1,3}(,\d{3}){2,}")
+    return int(european.sum()) > int(us.sum())
+
+
+def to_number(s, decimal_comma=None):
+    """Parse numbers, currency, and percentages ('$1,204.50', '10%', '2.167,60 EUR') to
+    floats. decimal_comma=None works out from the values which way they're written."""
     text = s.where(~is_missing(s), None).astype("str")
     text = text.str.replace(r"[$€£¥₹%\s]|USD|EUR|GBP", "", regex=True, flags=re.I)
+    if decimal_comma is None:
+        decimal_comma = uses_decimal_comma(text.where(s.notna()))
     if decimal_comma:
         text = text.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
     else:
@@ -38,8 +50,24 @@ def to_bool(s):
     return out
 
 
-def to_datetime(s, dayfirst=False):
+def day_comes_first(s):
+    """True for dates like 25.12.2025 or 25/12/2025: a first part over 12, or dots
+    (the European convention), with no second part over 12."""
+    parts = s.dropna().astype("str").str.extract(r"^\s*(\d{1,2})([./-])(\d{1,2})[./-]\d{2,4}")
+    parts = parts.dropna()
+    if parts.empty:
+        return False
+    first, second = parts[0].astype(int), parts[2].astype(int)
+    if (second > 12).any():
+        return False
+    return bool((first > 12).any() or (parts[1] == ".").mean() > 0.5)
+
+
+def to_datetime(s, dayfirst=None):
+    """Parse dates in any common format. dayfirst=None works it out from the values."""
     values = s.where(~is_missing(s), None)
+    if dayfirst is None:
+        dayfirst = day_comes_first(values)
     return pd.to_datetime(values, errors="coerce", format="mixed", dayfirst=dayfirst)
 
 
@@ -57,7 +85,9 @@ LOG_FORMATS = {
     ),
     "app": re.compile(
         r"^\[?(?P<timestamp>\d{4}-\d{2}-\d{2}[ T][\d:.,]+(?:Z|[+-]\d{2}:?\d{2})?)\]?\s+"
-        r"\[?(?P<level>" + LEVELS + r")\]?\s+(?:\[?(?P<logger>[\w.$/-]+)\]?\s*[:-]\s+)?"
+        r"\[?(?P<level>" + LEVELS + r")\]?\s+"
+        # a logger in brackets ("[payment] ...") or followed by ":" or "-" ("payment: ...")
+        r"(?:(?P<logger>\[[\w.$/-]+\](?=\s)|[\w.$/-]+(?=\s*[:-]\s))\s*[:-]?\s+)?"
         r"(?P<message>.*)$",
         re.I,
     ),
@@ -95,6 +125,8 @@ def parse_log_lines(path):
         m = pattern.match(line)
         if m:
             record = {k: (v or "") for k, v in m.groupdict().items()}
+            if record.get("logger", "").startswith("["):
+                record["logger"] = record["logger"].strip("[]")
             record["extra_lines"] = "0"
             records.append(record)
         elif records:  # continuation of the previous record

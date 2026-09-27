@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from mosaic.evidence.store import EvidenceStore
 from mosaic.llm.direct import OnEvent, generate_structured
 from mosaic.llm.quota import PoolRule, QuotaTracker
+from mosaic.security.injection import neutralize
 from mosaic.text.profile import snippet
 
 MAX_DOCS = 10
@@ -77,8 +78,8 @@ def reading_review(
     if not docs:
         return None
     listing = "\n\n".join(
-        f"Document {n} (label: {label or 'none'}):\n<document>\n{snippet(text, MAX_CHARS)}\n"
-        "</document>"
+        f"Document {n} (label: {label or 'none'}):\n<document>\n"
+        f"{snippet(neutralize(text), MAX_CHARS)}\n</document>"
         for n, (_, label, text) in enumerate(docs, 1)
     )
     report, model = generate_structured(
