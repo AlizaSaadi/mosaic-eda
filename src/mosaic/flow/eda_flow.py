@@ -73,6 +73,8 @@ class EDAState(FlowState):
     parts: list[dict[str, Any]] = Field(default_factory=list)
     share: bool = False  # opt-in: save a public copy of the report
     share_urls: dict[str, str] = Field(default_factory=dict)
+    # what each cleaning step did: {"op", "description", "changes", "rationale"}
+    cleaning: list[dict[str, Any]] = Field(default_factory=list)
 
 
 MAX_REVISIONS = 2
@@ -715,6 +717,11 @@ class EDAFlow(Flow[EDAState]):
         plan = CleaningPlan.model_validate(self.state.plan)
         out = self._rt.ws.out
         charts = [self._rt.store.get(cid).data["figure"] for cid in self._adapter.chart_ids[:8]]
+        self.state.cleaning = [
+            {"op": s.op, "description": s.description, "changes": s.changes,
+             "rationale": s.rationale}
+            for s in run.steps
+        ]  # fmt: skip
         self._write_reports(
             source_name=self.state.source_name,
             narrative=self.state.narrative,

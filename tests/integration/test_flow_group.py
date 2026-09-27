@@ -66,6 +66,7 @@ def test_group_mode_analyzes_each_type_and_links_them(tmp_path):
     assert {f["title"] for f in state.findings} >= {"Labels disagree with folders"}
     html = Path(state.outputs["report"]).read_text(encoding="utf-8")
     assert "Each data type" in html and "Table-to-file links" in html
+    assert all(p["cleaning"] for p in state.parts) and "Cleaning steps" in html
     with zipfile.ZipFile(state.outputs["cleaned"]) as z:
         names = z.namelist()
     assert "table/report.html" in names and "image/report.html" in names

@@ -51,6 +51,17 @@ body { background: var(--m-bg); }
 .dark .gradio-container .m-tool .when-dark { display: inline-flex; }
 .gradio-container #m-cb-btn[aria-pressed="true"] { background: var(--m-accent-2); border-color: var(--m-accent-2); color: #fff !important; }
 
+#m-toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0;
+  max-width: min(520px, calc(100vw - 32px)); padding: 12px 16px; border-radius: 12px; z-index: 1000;
+  background: #2B1D14; color: #FBF6EE; font: 14px/1.45 Inter, sans-serif; pointer-events: none;
+  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, .6); transition: opacity .25s, transform .25s;
+}
+#m-toast.show { opacity: 1; transform: translate(-50%, 0); }
+.dark #m-toast { background: #F3E9DC; color: #2B1D14; }
+/* color-blind mode: primary buttons in the Okabe-Ito vermillion too */
+body.cb-safe .gradio-container button.primary { background: #D55E00 !important; border-color: #D55E00 !important; }
+
 /* ---- the office rule on the welcome screen ---- */
 .gradio-container .house-rule {
   max-width: 460px; margin: 14px auto 4px; padding: 14px 18px 12px; text-align: center;

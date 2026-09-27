@@ -1,6 +1,6 @@
 [project]
 name = "mosaic-eda"
-version = "0.9.1"
+version = "0.9.2"
 description = "MOSAIC EDA: Multimodal Orchestrated System for Analysis, Inspection & Cleaning"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -22,6 +22,8 @@ filterwarnings = ["ignore::DeprecationWarning:crewai.*"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
+# scripts saved from recorded runs, kept exactly as a run produced them
+extend-exclude = ["examples/replays"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]

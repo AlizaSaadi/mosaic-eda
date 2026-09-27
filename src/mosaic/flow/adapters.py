@@ -200,7 +200,7 @@ if __name__ == "__main__":
     target = Path(sys.argv[2] if len(sys.argv) > 2 else "cleaned_{kind}")
     df = clean(build_table(source))
     {export_call}(df, source, target)
-    print(f"Saved {{{{len(df)}}}} files to", target)
+    print(f"Saved {{len(df)}} files to", target)
 '''
 
 

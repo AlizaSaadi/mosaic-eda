@@ -233,6 +233,10 @@ def _group(pdf: ReportPDF, parts: list[dict[str, Any]], links: dict[str, Any] | 
             continue
         for f in p["finding_list"]:
             pdf.para(f"• {f['title']}: {f['statement']}", 9)
+        if p.get("cleaning"):
+            pdf.para("Cleaning steps", 9, "B")
+            for i, c in enumerate(p["cleaning"], 1):
+                pdf.para(f"{i}. {c['op']}: {c['changes']}", 9)
         pdf.ln(2)
     if links:
         pdf.heading("Table-to-file links")
@@ -325,13 +329,13 @@ def render_pdf(path: Path, **ctx: Any) -> Path:
             pdf.para(ctx.get("plan_summary", ""), 9.5)
         if steps:
             rows = [
-                [s.index, s.op, s.risk, ", ".join(s.columns) or "all",
-                 f"{s.rows_before:,} → {s.rows_after:,}" if s.rows_after != s.rows_before
-                 else f"{s.rows_before:,}", s.rationale]
+                [s.index, f"{s.op}" + (f" on {', '.join(s.columns)}" if s.columns else ""),
+                 s.changes or "", f"{s.rows_before:,} → {s.rows_after:,}"
+                 if s.rows_after != s.rows_before else f"{s.rows_before:,}", s.rationale]
                 for s in steps
             ]  # fmt: skip
-            pdf.table(["#", "Operation", "Risk", "Columns", unit.capitalize(), "Why"], rows,
-                      (8, 46, 18, 22, 26, 58))  # fmt: skip
+            pdf.table(["#", "Step", "What changed", unit.capitalize(), "Why"], rows,
+                      (8, 38, 66, 22, 44))  # fmt: skip
             pdf.small("The same steps are in cleaning_pipeline.py, which reruns on the full data.")
 
         charts = ctx.get("charts") or []

@@ -43,13 +43,40 @@
     document.body.classList.toggle("cb-safe", on);
     $("#m-cb-btn")?.setAttribute("aria-pressed", String(on));
   }
-  // called by the hidden checkbox's change event, so the server recolors the charts too
+  // The toolbar button sets what the visitor wants; a hidden Gradio checkbox carries it to
+  // the server (which recolors the charts). Gradio can render that checkbox seconds after
+  // the page loads (slower on Spaces), so the two are kept in step on a timer.
+  let wantCb = recall("mosaic-cb") === "1";
+  let syncing = 0;
+  function colorBlindBox() {
+    return document.querySelector("#m-cb input[type=checkbox]");
+  }
+  function syncColorBlind() {
+    applyColorBlind(wantCb);
+    const box = colorBlindBox();
+    if (box && box.checked !== wantCb && Date.now() - syncing > 1500) {
+      syncing = Date.now();
+      box.click(); // Gradio sends the change to the server, which redraws the charts
+    }
+  }
+  // called by the hidden checkbox's change event
   window.mosaicColorBlind = function (on) {
+    wantCb = on;
     applyColorBlind(on);
     remember("mosaic-cb", on ? "1" : "0");
   };
-  function colorBlindBox() {
-    return document.querySelector("#m-cb input[type=checkbox]");
+  function toast(text) {
+    let el = document.getElementById("m-toast");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "m-toast";
+      el.setAttribute("role", "status");
+      document.body.appendChild(el);
+    }
+    el.textContent = text;
+    el.classList.add("show");
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove("show"), 3800);
   }
   document.addEventListener("click", (ev) => {
     if (!ev.target.closest) return;
@@ -58,25 +85,29 @@
       applyTheme(dark);
       remember("mosaic-theme", dark ? "dark" : "light");
     } else if (ev.target.closest("#m-cb-btn")) {
-      const box = colorBlindBox();
-      if (box) box.click(); // Gradio sends the change to the server and back to mosaicColorBlind
-      else window.mosaicColorBlind(!document.body.classList.contains("cb-safe"));
+      wantCb = !wantCb;
+      remember("mosaic-cb", wantCb ? "1" : "0");
+      syncing = 0;
+      syncColorBlind();
+      toast(
+        wantCb
+          ? "Color-blind colors on: charts and highlights now use colors that stay distinct " +
+              "with red-green and blue-yellow color blindness."
+          : "Color-blind colors off."
+      );
     }
   });
-  let restoredCb = false;
+  const loaded = Date.now();
   function restoreSettings() {
     const theme = recall("mosaic-theme");
-    applyTheme(theme ? theme === "dark" : document.body.classList.contains("dark"));
-    const box = colorBlindBox();
-    if (!restoredCb && box && recall("mosaic-cb") === "1") {
-      restoredCb = true;
-      if (!box.checked) box.click();
+    // Gradio sets its own theme class while it starts up: apply the saved one after it
+    if (Date.now() - loaded < 15000) {
+      applyTheme(theme ? theme === "dark" : document.body.classList.contains("dark"));
     }
-    applyColorBlind(box ? box.checked : recall("mosaic-cb") === "1");
+    syncColorBlind();
   }
-  // Gradio sets its own theme class while it starts up: apply the saved one after it
   document.addEventListener("DOMContentLoaded", restoreSettings);
-  [600, 1500, 3000].forEach((ms) => setTimeout(restoreSettings, ms));
+  setInterval(restoreSettings, 800);
 
   // ---- the office ----
   function place(el, x, y) {

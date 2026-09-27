@@ -35,6 +35,133 @@ class StepResult:
     cols_before: int
     cols_after: int
     new_missing: dict[str, int] = field(default_factory=dict)
+    description: str = ""  # what the operation does, in plain words
+    changes: str = ""  # what it actually changed in this data, with examples
+
+
+MAX_EXAMPLES = 3
+MAX_COLUMNS_LISTED = 6
+
+
+def _show(value) -> str:
+    try:
+        if pd.isna(value):
+            return "(missing)"
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, bool | np.bool_):
+        return str(bool(value))
+    if isinstance(value, int | float | np.integer | np.floating):
+        number = float(value)
+        return str(int(number)) if number == int(number) and abs(number) < 1e15 else f"{number:g}"
+    text = str(value).replace(chr(10), " ").replace(chr(13), " ")  # spaces stay visible
+    return f"'{text[:40]}…'" if len(text) > 40 else f"'{text}'"
+
+
+def _plain(value) -> str | None:
+    """A value as it reads, so '5' and 5.0 count as the same."""
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return _show(value).strip("'")
+
+
+def _count(n: int, unit: str) -> str:
+    return f"{n:,} {unit if n != 1 else unit.removesuffix('s')}"
+
+
+def _aligned(before: pd.DataFrame, after: pd.DataFrame):
+    """Rows of `before` and `after` that are the same item, or None if that can't be told."""
+    by_path = "path" in before.columns and "path" in after.columns
+    if by_path and before["path"].is_unique and after["path"].is_unique:
+        b = before.set_index("path", drop=False)
+        a = after.set_index("path", drop=False)
+        common = a.index.intersection(b.index)
+        return b.loc[common], a.loc[common]
+    renumbered = len(after) < len(before) and after.index.equals(pd.RangeIndex(len(after)))
+    if before.index.is_unique and after.index.isin(before.index).all() and not renumbered:
+        if len(after) == len(before) and not before.index.equals(after.index):
+            return None  # reordered
+        return before.loc[after.index], after
+    return None
+
+
+def describe_change(before: pd.DataFrame, after: pd.DataFrame, unit: str = "rows") -> str:
+    """What one cleaning step changed, in plain words with a few examples."""
+    parts = []
+    removed = len(before) - len(after)
+    if removed > 0:
+        examples = ""
+        if "path" in before.columns and "path" in after.columns:
+            gone = [x for x in before["path"] if x not in set(after["path"])][:MAX_EXAMPLES]
+            more = ", ..." if removed > len(gone) else ""
+            examples = f" ({', '.join(str(g) for g in gone)}{more})"
+        parts.append(f"removed {_count(removed, unit)}{examples}")
+    elif removed < 0:
+        parts.append(f"added {_count(-removed, unit)}")
+    new_cols = [c for c in after.columns if c not in before.columns]
+    gone_cols = [c for c in before.columns if c not in after.columns]
+    if gone_cols:
+        parts.append("removed column(s) " + ", ".join(map(str, gone_cols[:MAX_COLUMNS_LISTED])))
+    pair = _aligned(before, after)
+    for col in new_cols[:MAX_COLUMNS_LISTED]:
+        values = after[col]
+        marked = int((values == True).sum()) if values.dtype == bool else int(values.notna().sum())  # noqa: E712
+        parts.append(f"marked {_count(marked, unit)} in a new '{col}' column")
+    if pair is not None:
+        b_all, a_all = pair
+        listed = 0
+        for col in [c for c in after.columns if c in before.columns]:
+            b, a = b_all[col], a_all[col]
+            b_missing, a_missing = b.isna().to_numpy(), a.isna().to_numpy()
+            same = (b_missing & a_missing) | (
+                ~b_missing & ~a_missing & (b.astype(str).to_numpy() == a.astype(str).to_numpy())
+            )
+            changed = ~same
+            if changed.any():  # a value only retyped (the text '5' to the number 5) is the same
+                idx = np.flatnonzero(changed)
+                pairs_ = zip(b.iloc[idx], a.iloc[idx], strict=True)
+                keep = np.array([_plain(x) != _plain(y) for x, y in pairs_], dtype=bool)
+                changed[idx[~keep]] = False
+            n = int(changed.sum())
+            was_text = not pd.api.types.is_numeric_dtype(before[col]) and not (
+                pd.api.types.is_datetime64_any_dtype(before[col])
+            )
+            if was_text and pd.api.types.is_numeric_dtype(after[col]):
+                parts.append(f"converted '{col}' to numbers")
+            elif was_text and pd.api.types.is_datetime64_any_dtype(after[col]):
+                parts.append(f"converted '{col}' to dates")
+            if not n:
+                continue
+            listed += 1
+            if listed > MAX_COLUMNS_LISTED:
+                parts.append("and more columns")
+                break
+            if pd.api.types.is_bool_dtype(after[col]) and bool(a[changed].all()):
+                parts.append(f"marked {_count(n, unit)}: {col.replace('_', ' ')}")  # a flag
+                continue
+            emptied = int((changed & a_missing).sum())
+            pairs = []
+            for x, y in zip(b[changed], a[changed], strict=True):
+                shown = f"{_show(x)} → {_show(y)}"
+                if shown not in pairs:
+                    pairs.append(shown)
+                if len(pairs) == MAX_EXAMPLES:
+                    break
+            note = (
+                f", {emptied:,} of them now missing"
+                if emptied and emptied < n
+                else (", all now missing" if emptied else "")
+            )
+            parts.append(
+                f"changed {_count(n, 'values')} in '{col}'{note} (e.g. {'; '.join(pairs)})"
+            )
+    if not parts:
+        return "Nothing needed changing: the data already met this rule."
+    text = "; ".join(parts)
+    return text[0].upper() + text[1:] + "."
 
 
 @dataclass
@@ -133,6 +260,8 @@ def execute_plan(
                 cols_before=before.shape[1],
                 cols_after=after.shape[1],
                 new_missing=new_missing,
+                description=spec.description,
+                changes=describe_change(before, after, unit),
             )
         )
         work = after

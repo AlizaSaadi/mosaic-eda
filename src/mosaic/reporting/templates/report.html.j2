@@ -79,6 +79,8 @@ ul{padding-left:20px} footer{margin-top:40px;color:var(--muted);font-size:13px}
   {% if p.status == "done" %}
   {% if p.headline %}<div><b>{{ p.headline }}</b></div>{% endif %}
   <ul>{% for f in p.finding_list %}<li><span class="chip {{ f.severity }}">{{ f.severity|capitalize }}</span>{{ f.title }}: {{ f.statement }}</li>{% endfor %}</ul>
+  {% if p.cleaning %}<div><b>Cleaning steps</b></div>
+  <ol>{% for c in p.cleaning %}<li><b>{{ c.description or c.op }}</b> <code>{{ c.op }}</code>: {{ c.changes }}{% if c.rationale %} <span class="ev">Why: {{ c.rationale }}</span>{% endif %}</li>{% endfor %}</ol>{% endif %}
   {% else %}<div>Not analyzed: {{ p.error }}</div>{% endif %}
 </div>
 {% endfor %}
@@ -109,9 +111,10 @@ ul{padding-left:20px} footer{margin-top:40px;color:var(--muted);font-size:13px}
 <h2>Cleaning applied</h2>
 <p>{{ plan_summary }}</p>
 <div class="tbl"><table>
-<tr><th>#</th><th>Operation</th><th>Risk</th><th>Columns</th><th>{{ unit|capitalize }}</th><th>Why</th></tr>
+<tr><th>#</th><th>Step</th><th>What changed in your data</th><th>{{ unit|capitalize }}</th><th>Why</th></tr>
 {% for s in steps %}
-<tr><td>{{ s.index }}</td><td><code>{{ s.op }}</code></td><td>{{ s.risk }}</td><td>{{ s.columns|join(", ") or "all" }}</td>
+<tr><td>{{ s.index }}</td><td><b>{{ s.description or s.op }}</b><br><code>{{ s.op }}</code>{% if s.columns %} on {{ s.columns|join(", ") }}{% endif %} · {{ s.risk }}</td>
+<td>{{ s.changes }}</td>
 <td>{{ "{:,}".format(s.rows_before) }}{% if s.rows_after != s.rows_before %} → {{ "{:,}".format(s.rows_after) }}{% endif %}</td><td>{{ s.rationale }}</td></tr>
 {% endfor %}
 </table></div>

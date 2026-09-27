@@ -59,7 +59,7 @@ def test_image_dataset_end_to_end(tmp_path):
     assert len(images) == state.rows_after
 
 
-def test_exported_image_pipeline_reproduces_the_result(tmp_path):
+def test_exported_image_pipeline_reproduces_the_result(tmp_path, capsys):
     state, _ = run_images(tmp_path)
     raw = tmp_path / "raw"
     zipfile.ZipFile(SHAPES).extractall(raw)
@@ -73,3 +73,4 @@ def test_exported_image_pipeline_reproduces_the_result(tmp_path):
     rerun = pd.read_csv(out / "image_manifest.csv")
     app = pd.read_csv(state.outputs["manifest"])
     assert sorted(rerun["path"]) == sorted(app["path"])
+    assert f"Saved {len(app)} files to" in capsys.readouterr().out

@@ -124,6 +124,11 @@ def results_markdown(state) -> str:
             f"{p['items_before']} → {p['items_after']}"
         )
         lines += [f"- **{f['title']}.** {f['statement']}" for f in p["finding_list"]]
+        if p.get("cleaning"):
+            lines += ["", f"**How the {p['modality']} data was cleaned**", ""]
+            lines += cleaning_lines(p["cleaning"])
+    if state.cleaning:
+        lines += ["", "### How your data was cleaned", "", *cleaning_lines(state.cleaning)]
     if n.get("next_steps"):
         lines += ["", "### Next steps", *[f"1. {s}" for s in n["next_steps"]]]
     if state.share_urls:
@@ -132,6 +137,52 @@ def results_markdown(state) -> str:
     if state.notes:
         lines += ["", "### Notes", *[f"- {x}" for x in state.notes]]
     return "\n".join(lines)
+
+
+def cleaning_lines(steps: list[dict]) -> list[str]:
+    def safe(text: str) -> str:  # examples can hold HTML or Markdown from the data itself
+        return html.escape(text or "").replace("*", r"\*").replace("_", r"\_")
+
+    return [
+        f"{i}. **{safe(c.get('description') or c['op'])}** `{c['op']}`: {safe(c['changes'])}"
+        + (f" *Why: {safe(c['rationale'])}*" if c.get("rationale") else "")
+        for i, c in enumerate(steps, 1)
+    ]
+
+
+DOWNLOADS = (
+    ("cleaned", "Download cleaned data", "primary"),
+    ("pdf", "Report (PDF)", "secondary"),
+    ("report", "Report (HTML)", "secondary"),
+    ("pipeline", "Cleaning script (.py)", "secondary"),
+)
+
+
+def download_updates(outputs: dict[str, str] | None = None) -> list:
+    """One update per download button: shown with its file, or hidden."""
+    outputs = outputs or {}
+    return [
+        gr.update(value=outputs[key], visible=True)
+        if outputs.get(key)
+        else gr.update(value=None, visible=False)
+        for key, _, _ in DOWNLOADS
+    ]
+
+
+def replay_outputs(files: list[str]) -> dict[str, str]:
+    """Which saved replay file is which download."""
+    out = {}
+    for f in files:
+        name = Path(f).name
+        if name == "report.html":
+            out["report"] = f
+        elif name == "report.pdf":
+            out["pdf"] = f
+        elif name.endswith(".py"):
+            out["pipeline"] = f
+        elif name.startswith("cleaned"):
+            out["cleaned"] = f
+    return out
 
 
 def choice_markdown(counts: dict[str, int]) -> str:
@@ -214,6 +265,7 @@ def run_analysis(
         office=None,
         skip=False,
         figs=None,
+        outputs=None,
     ):
         return (
             feed if feed is not None else [],
@@ -230,6 +282,7 @@ def run_analysis(
             office if office is not None else gr.update(),
             gr.update(visible=skip),
             figs if figs is not None else gr.update(),
+            *download_updates(outputs),
         )  # fmt: skip
 
     if not source:
@@ -323,6 +376,7 @@ def run_analysis(
         office=office,
         skip=finished,
         figs=figures,
+        outputs=state.outputs,
     )
 
 
@@ -336,6 +390,7 @@ def replay_analysis(name: str, drink_kind: str = "tea", color_blind: bool = Fals
     empty_plots = [gr.update(value=None, visible=False)] * MAX_PLOTS
 
     def frame(screen, shown, *, results=None, tiles="", files=None, plots=None, figs=None):
+        ready = replay_outputs(files or [])
         return (
             [to_message(e) for e in shown],
             f"Replay of a recorded run · {len(shown)} of {len(events)} steps",
@@ -351,6 +406,7 @@ def replay_analysis(name: str, drink_kind: str = "tea", color_blind: bool = Fals
             office_state(job, shown, drink_kind),
             gr.update(visible=figs is not None),
             figs if figs is not None else gr.update(),
+            *download_updates(ready),
         )
 
     start = time.time()
@@ -577,6 +633,11 @@ def build_app() -> gr.Blocks:
 
         with gr.Column(visible=False, elem_classes="m-screen") as results_screen:
             tiles = gr.HTML("")
+            with gr.Row(elem_classes="m-downloads"):
+                download_btns = [
+                    gr.DownloadButton(label, variant=variant, visible=False, size="md")
+                    for _, label, variant in DOWNLOADS
+                ]
             results = gr.Markdown(visible=False)
             plots = []
             for _ in range(MAX_PLOTS // 2):  # two charts per row
@@ -588,10 +649,8 @@ def build_app() -> gr.Blocks:
                 columns=2,
                 height="auto",
             )
-            downloads = gr.File(
-                label="Downloads: report (HTML and PDF), cleaned data, pipeline script, trace",
-                file_count="multiple",
-            )
+            with gr.Accordion("All files (with the manifest and the run trace)", open=False):
+                downloads = gr.File(label="Files from this run", file_count="multiple")
             again_btn = gr.Button("Analyze another dataset")
             with gr.Group(elem_classes="review-box"):
                 gr.Markdown(
@@ -620,7 +679,7 @@ def build_app() -> gr.Blocks:
         figures = gr.State([])
         outputs = [
             feed, counters, results, tiles, downloads, *plots, gallery, runs_left, choice_panel,
-            choice_text, *screens, office_box, skip_btn, figures,
+            choice_text, *screens, office_box, skip_btn, figures, *download_btns,
         ]  # fmt: skip
         ask = gr.State("ask")
         common = [upload, url, goal, user_key]

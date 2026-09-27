@@ -319,3 +319,21 @@ def test_list_items_and_numeric_keys_are_citable(ctx):
     ]
     ok, _ = findings_guardrail(ctx)(out({"findings": findings}))
     assert ok
+
+
+def test_each_cleaning_step_says_what_it_changed():
+    from mosaic.tables.cleaning import describe_change
+
+    before = pd.DataFrame({"region": ["north", " east", None], "price": ["$1,200", "5", "x"]})
+    after = before.copy()
+    after["region"] = after["region"].str.strip().str.capitalize()
+    text = describe_change(before, after)
+    assert "Changed 2 values in 'region'" in text and "' east' → 'East'" in text
+    after["price"] = pd.to_numeric(before["price"].str.replace(r"[$,]", "", regex=True), "coerce")
+    text = describe_change(before, after)
+    assert "converted 'price' to numbers" in text and "'$1,200' → 1200" in text
+    assert "'5' → 5" not in text  # only retyped, not changed
+    files = pd.DataFrame({"path": ["a/1.jpg", "a/2.jpg"], "corrupt": [False, True]})
+    kept = files[~files["corrupt"]].reset_index(drop=True)
+    assert describe_change(files, kept, "images") == "Removed 1 image (a/2.jpg)."
+    assert describe_change(files, files).startswith("Nothing needed changing")

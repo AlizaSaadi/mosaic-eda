@@ -78,6 +78,7 @@ def summarize_part(flow: Any) -> dict[str, Any]:
             {k: f[k] for k in ("title", "statement", "severity")} for f in state.findings
         ],
         "headline": narrative.get("headline", ""),
+        "cleaning": state.cleaning,
         "out": str(flow._rt.ws.out),
         "charts": part_charts(flow),
     }

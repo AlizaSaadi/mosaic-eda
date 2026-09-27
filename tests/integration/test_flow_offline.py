@@ -48,6 +48,8 @@ def test_messy_csv_end_to_end(run_flow):
         assert Path(state.outputs[name]).exists()
     html = Path(state.outputs["report"]).read_text(encoding="utf-8")
     assert "Refund amount leaks the target" in html and "Plotly.newPlot" in html
+    assert "What changed in your data" in html
+    assert state.cleaning and all(c["changes"] and c["description"] for c in state.cleaning)
     cleaned = pd.read_csv(state.outputs["cleaned"])
     assert len(cleaned) == 400 and "revenue_outlier" in cleaned.columns
 
