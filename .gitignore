@@ -24,3 +24,6 @@ flagged/
 
 # Private notes (not published)
 docs/linkedin-notes.md
+
+# golden datasets for the evaluation include a log file
+!eval/datasets/*.log
