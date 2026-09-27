@@ -365,3 +365,31 @@ def test_european_numbers_and_dates_are_read_correctly():
     assert us == ["03-25", "04-02"]
     renamed = describe_change(pd.DataFrame({"A B": [1]}), pd.DataFrame({"a_b": [1]}))
     assert renamed == "Renamed columns A B -> a_b."
+
+
+def test_triage_cant_pick_an_identifier_as_the_target(tmp_path):
+    from mosaic.events.reporter import RunReporter
+    from mosaic.guardrails.task_guardrails import GuardContext
+
+    df = pd.DataFrame(
+        {"image": [f"img_{i}.jpg" for i in range(30)], "label": ["cat", "dog", "cow"] * 10}
+    )
+    ctx = GuardContext(store=EvidenceStore(tmp_path), reporter=RunReporter())
+    ctx.df, ctx.columns = df, list(df.columns)
+    brief = {"dataset_description": "d", "focus_areas": []}
+    ok, message = triage_guardrail(ctx)(out({**brief, "target_column": "image"}))
+    assert not ok and "different value in almost every row" in message
+    ok, _ = triage_guardrail(ctx)(out({**brief, "target_column": "label"}))
+    assert ok
+
+
+def test_the_dry_run_refuses_to_make_up_most_of_a_column():
+    from mosaic.tables.cleaning import execute_plan
+    from mosaic.tables.ops import CleaningOp, CleaningPlan
+
+    df = pd.DataFrame({"notes": ["edge of frame", "", "", "re-shoot", "", ""], "n": ["1"] * 6})
+    plan = CleaningPlan(
+        summary="s", ops=[CleaningOp(op="impute_mode", columns=["notes"], rationale="gaps")]
+    )
+    run = execute_plan(plan, df)
+    assert not run.ok and "would make up most of 'notes' (67% missing)" in run.errors[0]

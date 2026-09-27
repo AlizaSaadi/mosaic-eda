@@ -1,0 +1,155 @@
+{
+ "dataset": "speech_audio",
+ "date": "2026-09-27",
+ "status": "done",
+ "error": "",
+ "modality": "audio",
+ "seconds": 67,
+ "counters": {
+  "model_calls": 9,
+  "tool_runs": 14,
+  "llm_calls": 8,
+  "facts_verified": 14,
+  "review_rounds": 2,
+  "guardrail_catches": 1,
+  "self_corrections": 2
+ },
+ "revisions": 1,
+ "fact_check_rejections": 1,
+ "first_findings_passed": true,
+ "items_before": 31,
+ "items_after": 23,
+ "quality_raw": 57.1,
+ "quality_clean": 98.5,
+ "findings": [
+  {
+   "title": "Audio quality score improved after cleaning",
+   "statement": "The audio data quality score increased from 57.1 out of 100 before cleaning to 98.5 out of 100 after cleaning.",
+   "severity": "info",
+   "recommendation": "Use the cleaned dataset for model training to benefit from the higher quality score."
+  },
+  {
+   "title": "Dataset size reduced during cleaning",
+   "statement": "The cleaning process removed 8 clips in total from an initial count of 31 clips, leaving 23 clips.",
+   "severity": "warning",
+   "recommendation": "Review the removed clips to ensure no critical training data was lost."
+  },
+  {
+   "title": "Class imbalance persists after cleaning",
+   "statement": "The class imbalance ratio across the command categories is 2.0 after cleaning, with 10 yes clips, 8 no clips, and 5 stop clips.",
+   "severity": "warning",
+   "recommendation": "Apply data augmentation or class weighting strategies to handle the remaining class imbalance."
+  },
+  {
+   "title": "Label mismatches detected in raw data",
+   "statement": "Transcript comparison identified 3 label mismatches where the transcription did not match the folder label, which remain present in the final 23 cleaned clips unless manually removed.",
+   "severity": "critical",
+   "recommendation": "Manually inspect and relabel or remove the clips where transcripts do not match folder labels."
+  },
+  {
+   "title": "Raw audio contains duplicates and corrupt files",
+   "statement": "The raw audio contained 1 corrupt file, 1 exact extra copy, and 2 near extra copies.",
+   "severity": "warning",
+   "recommendation": "Ensure automated ingestion pipelines continue to filter out corrupt files and duplicates."
+  }
+ ],
+ "narrative": {
+  "headline": "Dataset quality improved to 98.5 after cleaning, but small size and class imbalance require attention for keyword spotting.",
+  "executive_summary": "The speech_commands.zip dataset quality score increased from 57.1 out of 100 before cleaning to 98.5 out of 100 after cleaning. The cleaning process removed 8 clips in total from an initial count of 31 clips, leaving 23 clips. Transcript comparison identified 3 label mismatches where the transcription did not match the folder label. Additionally, the class imbalance ratio across the command categories is 2.0 after cleaning, with 10 yes clips, 8 no clips, and 5 stop clips.",
+  "next_steps": [
+   "Manually review and resolve the 3 label mismatches identified in the dataset.",
+   "Address the class imbalance across the 10 yes clips, 8 no clips, and 5 stop clips.",
+   "Incorporate data augmentation to compensate for the small final dataset size of 23 clips."
+  ]
+ },
+ "notes": [],
+ "cleaning": [
+  {
+   "op": "remove_corrupt",
+   "description": "Remove files that can't be decoded as audio.",
+   "changes": "Removed 1 clip (yes/yes_007.wav).",
+   "rationale": "Remove files that cannot be decoded as audio.",
+   "columns": []
+  },
+  {
+   "op": "drop_exact_duplicates",
+   "description": "Keep one copy of byte-identical files.",
+   "changes": "Removed 1 clip (yes/yes_001_copy.wav).",
+   "rationale": "Keep one copy of byte-identical files.",
+   "columns": []
+  },
+  {
+   "op": "drop_near_duplicates",
+   "description": "Keep one clip per group of re-encoded or re-saved copies of the same recording.",
+   "changes": "Removed 1 clip (no/no_002_reencoded.mp3).",
+   "rationale": "Keep one clip per group of re-encoded or re-saved copies of the same recording.",
+   "columns": []
+  },
+  {
+   "op": "drop_silent",
+   "description": "Remove clips that are mostly silence (silence_ratio at or above the value).",
+   "changes": "Removed 1 clip (no/no_009.wav).",
+   "rationale": "Remove clips that are mostly silence.",
+   "columns": []
+  },
+  {
+   "op": "drop_too_short",
+   "description": "Remove clips shorter than min_seconds.",
+   "changes": "Removed 1 clip (yes/yes_011.wav).",
+   "rationale": "Remove clips shorter than min_seconds.",
+   "columns": []
+  },
+  {
+   "op": "drop_clipped",
+   "description": "Remove clips where more than max_clip_ratio of samples are clipped.",
+   "changes": "Removed 1 clip (yes/yes_003.wav).",
+   "rationale": "Remove clips where too many samples are clipped.",
+   "columns": []
+  },
+  {
+   "op": "drop_noisy",
+   "description": "Remove clips with an SNR estimate below min_snr_db.",
+   "changes": "Removed 2 clips (no/no_008.wav, stop/stop_004.wav).",
+   "rationale": "Remove clips with an SNR estimate below min_snr_db.",
+   "columns": []
+  },
+  {
+   "op": "drop_files",
+   "description": "Remove specific files, for example clips with no speech or confirmed mislabels.",
+   "changes": "Nothing needed changing: the data already met this rule.",
+   "rationale": "Remove non-speech clip with no words.",
+   "columns": []
+  },
+  {
+   "op": "flag_suspected_mislabels",
+   "description": "Mark files for human review in the manifest (nothing is removed).",
+   "changes": "Marked 2 clips: suspected mislabel.",
+   "rationale": "Mark files for human review where the transcript does not match the folder label.",
+   "columns": []
+  },
+  {
+   "op": "to_mono",
+   "description": "Mix stereo clips down to one channel when exporting.",
+   "changes": "Marked 23 clips: to mono.",
+   "rationale": "Mix stereo clips down to one channel for consistency.",
+   "columns": []
+  },
+  {
+   "op": "resample",
+   "description": "Convert every clip to one sample rate when exporting.",
+   "changes": "Changed 23 values in 'resample_to' (e.g. 0 \u2192 16000).",
+   "rationale": "Convert every clip to a unified sample rate.",
+   "columns": []
+  },
+  {
+   "op": "convert_to_wav",
+   "description": "Export every clip as 16-bit WAV.",
+   "changes": "Marked 23 clips: to wav.",
+   "rationale": "Export every clip as 16-bit WAV for format consistency.",
+   "columns": []
+  }
+ ],
+ "checks": {
+  "readme": true
+ }
+}

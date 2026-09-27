@@ -4,18 +4,18 @@
  "status": "done",
  "error": "",
  "modality": "audio",
- "seconds": 67,
+ "seconds": 190,
  "counters": {
-  "model_calls": 9,
+  "fallbacks": 2,
+  "model_calls": 10,
   "tool_runs": 14,
-  "llm_calls": 8,
-  "facts_verified": 14,
-  "review_rounds": 2,
-  "guardrail_catches": 1,
+  "llm_calls": 9,
+  "facts_verified": 18,
+  "review_rounds": 3,
   "self_corrections": 2
  },
- "revisions": 1,
- "fact_check_rejections": 1,
+ "revisions": 2,
+ "fact_check_rejections": 0,
  "first_findings_passed": true,
  "items_before": 31,
  "items_after": 23,
@@ -23,43 +23,56 @@
  "quality_clean": 98.5,
  "findings": [
   {
-   "title": "Audio quality score improved after cleaning",
-   "statement": "The audio data quality score increased from 57.1 out of 100 before cleaning to 98.5 out of 100 after cleaning.",
+   "title": "Data quality score improved significantly",
+   "statement": "The dataset quality score increased from 57.1 out of 100 to 98.5 out of 100 after cleaning 8 clips.",
    "severity": "info",
-   "recommendation": "Use the cleaned dataset for model training to benefit from the higher quality score."
-  },
-  {
-   "title": "Dataset size reduced during cleaning",
-   "statement": "The cleaning process removed 8 clips in total from an initial count of 31 clips, leaving 23 clips.",
-   "severity": "warning",
-   "recommendation": "Review the removed clips to ensure no critical training data was lost."
+   "recommendation": "Use the cleaned dataset for training as the quality score is now high."
   },
   {
    "title": "Class imbalance persists after cleaning",
-   "statement": "The class imbalance ratio across the command categories is 2.0 after cleaning, with 10 yes clips, 8 no clips, and 5 stop clips.",
+   "statement": "The dataset remains imbalanced with a largest to smallest class ratio of 2.0, where 'yes' has 10 clips and 'stop' has 5 clips.",
    "severity": "warning",
-   "recommendation": "Apply data augmentation or class weighting strategies to handle the remaining class imbalance."
+   "recommendation": "Apply data augmentation or oversampling techniques to the 'stop' class to improve model robustness."
   },
   {
-   "title": "Label mismatches detected in raw data",
-   "statement": "Transcript comparison identified 3 label mismatches where the transcription did not match the folder label, which remain present in the final 23 cleaned clips unless manually removed.",
+   "title": "Label mismatches identified",
+   "statement": "Transcription analysis flagged 3 clips where the audio content does not match the folder label.",
    "severity": "critical",
-   "recommendation": "Manually inspect and relabel or remove the clips where transcripts do not match folder labels."
+   "recommendation": "Manually review and reassign or remove the 3 flagged mislabeled clips before training, as this is a critical blocking issue that will cause model degradation."
   },
   {
-   "title": "Raw audio contains duplicates and corrupt files",
-   "statement": "The raw audio contained 1 corrupt file, 1 exact extra copy, and 2 near extra copies.",
+   "title": "Dataset contained duplicates and corrupt files",
+   "statement": "Initial cleaning removed 1 corrupt file, 1 exact duplicate, and 1 near-duplicate file.",
    "severity": "warning",
-   "recommendation": "Ensure automated ingestion pipelines continue to filter out corrupt files and duplicates."
+   "recommendation": "Continue monitoring for duplicates if new data is added to the dataset."
+  },
+  {
+   "title": "Audio quality issues removed",
+   "statement": "Cleaning removed 1 silent, 1 too short, 1 clipped, and 2 noisy clips that were unsuitable for training.",
+   "severity": "warning",
+   "recommendation": "Ensure future data collection follows strict quality guidelines to avoid these common audio defects."
+  },
+  {
+   "title": "Dataset size is extremely small",
+   "statement": "The dataset size after cleaning is extremely small with only 23 clips total, which is insufficient for training a robust keyword-spotting model.",
+   "severity": "critical",
+   "recommendation": "The current dataset size is insufficient for training; the model will likely overfit or fail to generalize. Collect additional audio samples for all classes before attempting to train."
+  },
+  {
+   "title": "Inconsistent audio formats",
+   "statement": "The dataset contains mixed sample rates (16kHz and 44.1kHz) and channel counts (mono and stereo) across the 23 clips.",
+   "severity": "warning",
+   "recommendation": "Standardize all audio files to a uniform sample rate (e.g., 16kHz) and channel count (mono) as a mandatory preprocessing step in the model pipeline."
   }
  ],
  "narrative": {
-  "headline": "Dataset quality improved to 98.5 after cleaning, but small size and class imbalance require attention for keyword spotting.",
-  "executive_summary": "The speech_commands.zip dataset quality score increased from 57.1 out of 100 before cleaning to 98.5 out of 100 after cleaning. The cleaning process removed 8 clips in total from an initial count of 31 clips, leaving 23 clips. Transcript comparison identified 3 label mismatches where the transcription did not match the folder label. Additionally, the class imbalance ratio across the command categories is 2.0 after cleaning, with 10 yes clips, 8 no clips, and 5 stop clips.",
+  "headline": "Dataset quality improved to 98.5 but remains insufficient for model training.",
+  "executive_summary": "Cleaning efforts increased the dataset quality score from 57.1 to 98.5 by removing 8 unsuitable clips, including corrupt, silent, and noisy files. Despite these improvements, the final set of 23 clips is too small to train a robust keyword-spotting model. Furthermore, the dataset suffers from a 2.0 class imbalance ratio between 'yes' and 'stop' labels and requires manual verification for 3 flagged mislabeled clips. The current volume of data is inadequate for reliable performance.",
   "next_steps": [
-   "Manually review and resolve the 3 label mismatches identified in the dataset.",
-   "Address the class imbalance across the 10 yes clips, 8 no clips, and 5 stop clips.",
-   "Incorporate data augmentation to compensate for the small final dataset size of 23 clips."
+   "Perform manual verification of the 3 flagged mislabeled clips.",
+   "Source additional audio data to address the extremely small sample size of 23 clips.",
+   "Implement data augmentation or oversampling to mitigate the 2.0 class imbalance ratio.",
+   "Standardize all remaining files to a uniform 16kHz mono format to ensure consistency."
   ]
  },
  "notes": [],
@@ -68,84 +81,77 @@
    "op": "remove_corrupt",
    "description": "Remove files that can't be decoded as audio.",
    "changes": "Removed 1 clip (yes/yes_007.wav).",
-   "rationale": "Remove files that cannot be decoded as audio.",
+   "rationale": "Removes files that cannot be decoded as audio, as identified in the overview.",
    "columns": []
   },
   {
    "op": "drop_exact_duplicates",
    "description": "Keep one copy of byte-identical files.",
    "changes": "Removed 1 clip (yes/yes_001_copy.wav).",
-   "rationale": "Keep one copy of byte-identical files.",
+   "rationale": "Removes byte-identical files to reduce redundancy.",
    "columns": []
   },
   {
    "op": "drop_near_duplicates",
    "description": "Keep one clip per group of re-encoded or re-saved copies of the same recording.",
    "changes": "Removed 1 clip (no/no_002_reencoded.mp3).",
-   "rationale": "Keep one clip per group of re-encoded or re-saved copies of the same recording.",
+   "rationale": "Removes re-encoded or re-saved versions of the same recording.",
    "columns": []
   },
   {
    "op": "drop_silent",
    "description": "Remove clips that are mostly silence (silence_ratio at or above the value).",
    "changes": "Removed 1 clip (no/no_009.wav).",
-   "rationale": "Remove clips that are mostly silence.",
+   "rationale": "Removes files identified as silent.",
    "columns": []
   },
   {
    "op": "drop_too_short",
    "description": "Remove clips shorter than min_seconds.",
    "changes": "Removed 1 clip (yes/yes_011.wav).",
-   "rationale": "Remove clips shorter than min_seconds.",
+   "rationale": "Removes clips that are too short to be useful for speech recognition.",
    "columns": []
   },
   {
    "op": "drop_clipped",
    "description": "Remove clips where more than max_clip_ratio of samples are clipped.",
    "changes": "Removed 1 clip (yes/yes_003.wav).",
-   "rationale": "Remove clips where too many samples are clipped.",
+   "rationale": "Removes clips with significant signal clipping.",
    "columns": []
   },
   {
    "op": "drop_noisy",
    "description": "Remove clips with an SNR estimate below min_snr_db.",
    "changes": "Removed 2 clips (no/no_008.wav, stop/stop_004.wav).",
-   "rationale": "Remove clips with an SNR estimate below min_snr_db.",
-   "columns": []
-  },
-  {
-   "op": "drop_files",
-   "description": "Remove specific files, for example clips with no speech or confirmed mislabels.",
-   "changes": "Nothing needed changing: the data already met this rule.",
-   "rationale": "Remove non-speech clip with no words.",
+   "rationale": "Removes noisy clips that fall below the acceptable SNR threshold.",
    "columns": []
   },
   {
    "op": "flag_suspected_mislabels",
    "description": "Mark files for human review in the manifest (nothing is removed).",
    "changes": "Marked 2 clips: suspected mislabel.",
-   "rationale": "Mark files for human review where the transcript does not match the folder label.",
+   "rationale": "Flags clips where the transcription does not match the folder label for manual verification.",
    "columns": []
   },
   {
    "op": "to_mono",
    "description": "Mix stereo clips down to one channel when exporting.",
    "changes": "Marked 23 clips: to mono.",
-   "rationale": "Mix stereo clips down to one channel for consistency.",
+   "rationale": "Ensures consistent channel count across the dataset.",
    "columns": []
   },
   {
    "op": "resample",
    "description": "Convert every clip to one sample rate when exporting.",
    "changes": "Changed 23 values in 'resample_to' (e.g. 0 \u2192 16000).",
-   "rationale": "Convert every clip to a unified sample rate.",
+   "rationale": "Standardizes all audio to 16kHz for uniform processing.",
    "columns": []
   },
   {
    "op": "convert_to_wav",
    "description": "Export every clip as 16-bit WAV.",
    "changes": "Marked 23 clips: to wav.",
-   "rationale": "Export every clip as 16-bit WAV for format consistency.",
+   "rationale": "Ensures consistent file format for downstream analysis.",
    "columns": []
   }
  ],

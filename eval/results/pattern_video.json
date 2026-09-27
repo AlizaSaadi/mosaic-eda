@@ -4,12 +4,12 @@
  "status": "done",
  "error": "",
  "modality": "video",
- "seconds": 132,
+ "seconds": 139,
  "counters": {
   "model_calls": 8,
   "tool_runs": 13,
   "llm_calls": 7,
-  "facts_verified": 18,
+  "facts_verified": 15,
   "review_rounds": 2,
   "self_corrections": 1
  },
@@ -22,55 +22,55 @@
  "quality_clean": 97.8,
  "findings": [
   {
-   "title": "Video dataset quality improved after cleaning",
-   "statement": "The video quality score increased from 61.6 out of 100 to 97.8 out of 100 after removing 7 videos out of 30.",
+   "title": "Dataset video quality improved significantly",
+   "statement": "The overall video data quality score increased from 61.6 out of 100 to 97.8 out of 100 after cleaning operations.",
    "severity": "info",
-   "recommendation": "Proceed with training using the cleaned dataset of 23 videos."
+   "recommendation": "Use the cleaned dataset for training to ensure higher model performance."
   },
   {
-   "title": "Corrupt and unusable videos removed",
-   "statement": "Initial quality assessment found 1 corrupt video, 1 too-short clip, 1 black frame video, and 1 frozen video which were removed during cleaning.",
-   "severity": "critical",
-   "recommendation": "Ensure data collection pipelines filter out corrupted, static, or extremely short video files before dataset ingestion."
-  },
-  {
-   "title": "Exact and near-duplicates present in raw data",
-   "statement": "The raw dataset contained 1 group of byte-identical files and 3 groups of near-duplicates that were successfully dropped to prevent data leakage.",
-   "severity": "warning",
-   "recommendation": "Maintain duplicate detection checks in preprocessing pipelines for future data additions."
-  },
-  {
-   "title": "Class balance remains consistent",
-   "statement": "Class distribution across 3 classes maintains an imbalance ratio of 1.5 with 23 clean videos remaining.",
+   "title": "Dataset size reduced after cleaning",
+   "statement": "Cleaning operations removed 7 videos, reducing the total video count from 30 down to 23.",
    "severity": "info",
-   "recommendation": "Consider data augmentation or class weighting to account for the slight class distribution imbalance during training."
+   "recommendation": "Verify that the final set of 23 videos meets all minimum requirements for your training pipeline."
   },
   {
-   "title": "Silent audio track detected",
-   "statement": "1 audio track was found to be silent in the dataset across fractals/fractal_04.mp4.",
+   "title": "Presence of duplicate files in raw data",
+   "statement": "The raw dataset contained 1 group of byte-identical files and 3 groups of near-extra copies.",
    "severity": "warning",
-   "recommendation": "Verify whether audio features are necessary for the classifier; if so, remove or repair the silent audio clip."
+   "recommendation": "Ensure duplicate removal steps are consistently applied to prevent data leakage during training."
   },
   {
-   "title": "Suspected mislabeled samples identified",
-   "statement": "Vision review flagged a total of 2 suspected mislabeled samples as AI model observations that require manual verification.",
+   "title": "Identified quality issues in raw video files",
+   "statement": "Raw quality checks identified 1 corrupt video, 1 too_short video, 1 black video, and 1 frozen video.",
    "severity": "warning",
-   "recommendation": "Manually inspect fractals/fractal_09.mp4 and patterns/pattern_09.mp4 to correct potential label errors."
+   "recommendation": "Filter out corrupted, short, black, and frozen video samples before ingestion into the classifier."
   },
   {
-   "title": "Speech content and scene timing characteristics",
-   "statement": "Across 48 total scenes, 38 scenes contain speech spanning 27 videos with a median scene length of 2.53 seconds.",
+   "title": "Suspected mislabeled videos found",
+   "statement": "Vision review flagged a total of 3 suspected mislabeled videos across the dataset categories that require manual inspection before removal.",
+   "severity": "warning",
+   "recommendation": "Manually inspect the flagged videos to correct their labels or remove them from the training set."
+  },
+  {
+   "title": "Class distribution and imbalance",
+   "statement": "The cleaned dataset contains 23 videos across 3 classes with an imbalance ratio of 1.5.",
    "severity": "info",
-   "recommendation": "Account for spoken audio overlays matching specific visual scene intervals if training a multimodal model."
+   "recommendation": "Apply class weighting or data augmentation to account for class imbalance during training."
+  },
+  {
+   "title": "Silent audio track present",
+   "statement": "There is 1 silent audio track detected in the dataset.",
+   "severity": "info",
+   "recommendation": "Check if audio features are required for your model; if so, inspect or replace the silent track."
   }
  ],
  "narrative": {
-  "headline": "Video dataset quality improved to 97.8 out of 100 after cleaning 30 videos down to 23.",
-  "executive_summary": "The pattern_clips.zip dataset quality score increased from 61.6 out of 100 to 97.8 out of 100 after removing 7 videos out of 30. Cleaning removed 1 corrupt video, 1 too-short clip, 1 black frame video, and 1 frozen video, alongside byte-identical and near-duplicate files. The remaining 23 clean videos maintain a class imbalance ratio of 1.5 across 3 classes, with 38 scenes containing speech spanning 27 videos and a median scene length of 2.53 seconds across 48 total scenes. Two suspected mislabeled samples and 1 silent audio track in fractals/fractal_04.mp4 were also identified.",
+  "headline": "Dataset quality for pattern_clips.zip successfully improved from 61.6 to 97.8 out of 100 after cleaning 30 videos down to 23.",
+  "executive_summary": "Cleaning operations successfully boosted the video quality score from 61.6 out of 100 to 97.8 out of 100 by removing 7 problematic videos, leaving 23 total videos across 3 classes. The raw data contained byte-identical files, near-extra copies, a corrupt video, a too_short video, a black video, and a frozen video. Additionally, vision review flagged 3 suspected mislabeled videos requiring manual inspection, and 1 silent audio track was detected. The cleaned dataset maintains an imbalance ratio of 1.5.",
   "next_steps": [
-   "Manually verify the 2 suspected mislabeled samples flagged by vision review.",
-   "Inspect the silent audio track in fractals/fractal_04.mp4.",
-   "Proceed with training the video classifier using the 23 clean videos."
+   "Manually inspect the 3 suspected mislabeled videos flagged during vision review before final model training.",
+   "Verify the single silent audio track to determine if it impacts the video classifier requirements.",
+   "Proceed with training the video classifier using the 23 cleaned videos across 3 classes."
   ]
  },
  "notes": [],
@@ -79,21 +79,21 @@
    "op": "remove_corrupt",
    "description": "Remove files that can't be decoded as video.",
    "changes": "Removed 1 video (patterns/pattern_12.mp4).",
-   "rationale": "Remove files that cannot be decoded as video.",
+   "rationale": "Remove corrupt video files that cannot be decoded.",
    "columns": []
   },
   {
    "op": "drop_exact_duplicates",
    "description": "Keep one copy of byte-identical files.",
    "changes": "Removed 1 video (fractals/fractal_10.mp4).",
-   "rationale": "Keep one copy of byte-identical files to prevent data leakage.",
+   "rationale": "Remove byte-identical duplicate files to prevent data leakage.",
    "columns": []
   },
   {
    "op": "drop_near_duplicates",
    "description": "Keep one video per group of re-encoded, resized, or rotated copies of the same footage.",
    "changes": "Removed 2 videos (cells/cell_08.mp4, patterns/pattern_11.mp4).",
-   "rationale": "Keep one video per group of re-encoded, resized, or rotated copies.",
+   "rationale": "Remove re-encoded, resized, or rotated copies of the same footage.",
    "columns": []
   },
   {
@@ -114,7 +114,7 @@
    "op": "drop_frozen",
    "description": "Remove videos whose picture barely changes (motion below min_motion, 0-255 scale).",
    "changes": "Removed 1 video (fractals/fractal_09.mp4).",
-   "rationale": "Remove videos with motion below the frozen threshold.",
+   "rationale": "Remove frozen videos where picture motion is below the minimum threshold.",
    "columns": []
   },
   {
@@ -128,7 +128,7 @@
    "op": "flag_suspected_mislabels",
    "description": "Mark videos for human review in the manifest (nothing is removed).",
    "changes": "Marked 1 video: suspected mislabel.",
-   "rationale": "Mark suspected mislabeled videos for human review in the manifest.",
+   "rationale": "Mark suspected mislabeled videos identified in the vision review for human review.",
    "columns": []
   }
  ],

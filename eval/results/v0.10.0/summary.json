@@ -1,0 +1,12 @@
+{
+ "found": 68,
+ "planted": 83,
+ "agents": 37,
+ "unplanned": 11,
+ "first": 3,
+ "runs": 10,
+ "calls": 108,
+ "seconds": 656,
+ "facts": 96,
+ "revisions": 8
+}

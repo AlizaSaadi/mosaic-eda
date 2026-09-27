@@ -1,8 +1,10 @@
 """The Mosaic office: a small SVG floor plan where the agents work while a job runs.
 
 The layout is static. The live part is a list of office actions derived from the run's
-events (who is working, who hands work to whom, rejections, approvals). The browser script
-(static/office.js) polls that list from a hidden textbox and plays each action once.
+events. Walks between rooms come only from the agents' messages to each other (each names
+its sender and recipient), so the office shows the real conversation; "is working" events
+only light up a desk. The browser script (static/office.js) polls the list from a hidden
+textbox and plays each action once.
 """
 
 from __future__ import annotations
@@ -31,12 +33,48 @@ WORKING = {
     "Rex": "Rex is reviewing the findings",
     "Quill": "Quill is writing your report",
 }
-HANDOFF = {
-    ("Tilly", "Mop"): "Here's the brief!",
-    ("Mop", "Pip"): "Data's clean!",
-    ("Pip", "Rex"): "Findings ready",
-    ("Rex", "Quill"): "Write it up!",
-    ("Rex", "Pip"): "Please revise",
+# what a creature says when it hands over each kind of message (by the message's subject)
+SUBJECT_LINES = {
+    "triage brief": "Here's the brief!",
+    "cleaning plan, applied": "Data's clean!",
+    "findings for review": "Findings ready",
+    "revised findings": "Revised!",
+    "please revise": "Please revise",
+    "out of revision rounds": "Out of rounds",
+    "couldn't revise": "Couldn't fix it",
+    "final findings to write up": "Write it up!",
+}
+# the office caption for each message ({s} sender, {r} recipient)
+SUBJECT_CAPTIONS = {
+    "triage brief": "{s} gives {r} the brief",
+    "cleaning plan, applied": "{s} hands {r} the cleaned data",
+    "findings for review": "{s} sends {r} the findings to review",
+    "revised findings": "{s} sends {r} the revised findings",
+    "please revise": "{s} sends the findings back to {r} with comments",
+    "out of revision rounds": "{s} withholds the findings still in dispute",
+    "couldn't revise": "{s} tells {r} the revision didn't pass the fact check",
+    "final findings to write up": "{s} gives {r} the final findings to write up",
+}
+RED = {"please revise", "out of revision rounds"}
+# the caption while a check sends work back, by who owns the stage
+REDO_CAPTIONS = {
+    "Tilly": "A check sent Tilly's brief back; she's correcting it",
+    "Mop": "The dry run rejected Mop's plan; he's revising it",
+    "Pip": "The fact check caught a number; Pip is fixing it",
+    "Rex": "Rex's review wasn't consistent; he's redoing it",
+    "Quill": "Quill is rewriting part of the summary",
+}
+# the stage named in a check's title, or a model switch's role, and who owns it
+STAGE_OWNER = {
+    "triage": "Tilly",
+    "cleaning plan": "Mop",
+    "strategist": "Mop",
+    "findings": "Pip",
+    "analyst": "Pip",
+    "review": "Rex",
+    "reviewer": "Rex",
+    "writer": "Quill",
+    "report": "Quill",
 }
 
 
@@ -212,38 +250,76 @@ def _member(role: str) -> str | None:
     return AGENT_TO_MEMBER.get(role.strip())
 
 
+def _owner(text: str) -> str | None:
+    """Who a check or model switch belongs to, from the stage its title names."""
+    lower = text.lower()
+    return next((who for stage, who in STAGE_OWNER.items() if stage in lower), None)
+
+
+def _split(title: str) -> tuple[str, str]:
+    """'[table] Rex to Pip: please revise' -> ('table', 'please revise')."""
+    part = title[1 : title.index("]")] if title.startswith("[") else ""
+    return part, title.split(": ", 1)[-1]
+
+
 def office_actions(events: list[RunEvent], drink_kind: str = "none") -> list[dict[str, Any]]:
-    """Turn the run's events into office actions, in order. Deterministic, so the browser
-    can replay only the ones it hasn't seen."""
+    """Turn the run's events into office actions, in order. Each event maps to actions on
+    its own (no look-ahead), so the list only ever grows and the browser can play just the
+    new ones."""
     actions: list[dict[str, Any]] = []
     if drink_kind in ("tea", "coffee"):
         actions.append({"type": "deliver", "who": "Tilly", "to": "lounge", "kind": drink_kind})
-    current: str | None = None
+    working = rejected = None
     for e in events:
         if e.kind == "agent" and e.title.endswith(" is working"):
             who = _member(e.title[: -len(" is working")])
-            if not who:
+            if who and who != working:
+                actions.append({"type": "work", "who": who, "caption": WORKING[who]})
+                working = who
+        elif e.kind == "message":
+            part, subject = _split(e.title)
+            sender = _member(e.data.get("sender", ""))
+            recipient = _member(e.data.get("recipient", ""))
+            team = f"{part.capitalize()} team: " if part else ""
+            if e.data.get("sender") == "Cross-Type Synthesizer" or (
+                e.data.get("recipient") == "Cross-Type Synthesizer"
+            ):
+                team = "Linking the types: "
+            if not sender:
                 continue
-            if current and current != who:
-                say = HANDOFF.get((current, who), "Over to you!")
-                actions.append({"type": "handoff", "from": current, "to": who, "say": say})
-            actions.append({"type": "work", "who": who, "caption": WORKING[who]})
-            current = who
+            if subject == "approved":
+                actions.append({"type": "approve", "who": sender, "say": "Approved!",
+                                "caption": f"{team}{sender} approved the findings"})  # fmt: skip
+            elif subject == "your summary":
+                if part:  # one type's report within a mixed run
+                    done = f"{part.capitalize()} done!"
+                    actions.append({"type": "say", "who": sender, "say": done,
+                                    "caption": f"{team}the {part} report is written"})  # fmt: skip
+            elif recipient:
+                key = next((k for k in SUBJECT_LINES if subject.startswith(k)), "")
+                caption = SUBJECT_CAPTIONS.get(key, "{s} passes work to {r}")
+                actions.append({
+                    "type": "handoff", "from": sender, "to": recipient,
+                    "say": SUBJECT_LINES.get(key, "Over to you!"), "red": key in RED,
+                    "caption": team + caption.format(s=sender, r=recipient),
+                })  # fmt: skip
+            working = None  # after a walk, the next "is working" lights a desk again
         elif e.kind == "guardrail":
-            who = current or "Pip"
+            who = _owner(e.title) or working or "Pip"
             say = "Fixing a number" if "fact check" in e.title else "Redoing it"
-            actions.append({"type": "reject", "who": who, "say": say})
+            last = actions[-1] if actions else {}
+            if not (last.get("type") == "reject" and last.get("who") == who):  # one scene
+                caption = REDO_CAPTIONS.get(who, f"{who} is fixing something a check caught")
+                actions.append({"type": "reject", "who": who, "say": say, "caption": caption})
+            rejected = who
         elif e.kind == "fix":
-            actions.append({"type": "say", "who": current or "Pip", "say": "Fixed it!"})
-        elif e.kind == "review":
-            if "approved" in e.title.lower():
-                actions.append({"type": "approve", "who": "Rex", "say": "Approved!"})
-            else:
-                actions.append(
-                    {"type": "handoff", "from": "Rex", "to": "Pip", "say": "Please revise"}
-                )
+            actions.append({"type": "say", "who": rejected or working or "Pip", "say": "Fixed it!"})
         elif e.kind == "fallback":
-            actions.append({"type": "say", "who": current or "Tilly", "say": "Line's busy..."})
+            who = _owner(e.title) or working or "Tilly"
+            last = actions[-1] if actions else {}
+            if not (last.get("type") == "say" and last.get("who") == who
+                    and last.get("say") == "Line's busy..."):  # fmt: skip
+                actions.append({"type": "say", "who": who, "say": "Line's busy..."})
         elif e.kind == "step" and e.title == "Report ready":
             actions.append({"type": "finale", "who": "Quill", "say": "Your report!"})
         elif e.kind == "error":

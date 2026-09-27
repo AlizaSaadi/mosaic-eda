@@ -1,6 +1,6 @@
 [project]
 name = "mosaic-eda"
-version = "0.10.0"
+version = "0.10.1"
 description = "MOSAIC EDA: Multimodal Orchestrated System for Analysis, Inspection & Cleaning"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

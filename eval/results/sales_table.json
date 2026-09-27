@@ -4,7 +4,7 @@
  "status": "done",
  "error": "",
  "modality": "table",
- "seconds": 41,
+ "seconds": 37,
  "counters": {
   "tool_runs": 18,
   "model_calls": 6,
@@ -12,7 +12,7 @@
   "fallbacks": 4,
   "guardrail_catches": 1,
   "self_corrections": 1,
-  "facts_verified": 10,
+  "facts_verified": 14,
   "review_rounds": 1
  },
  "revisions": 0,
@@ -24,50 +24,56 @@
  "quality_clean": 100.0,
  "findings": [
   {
-   "title": "Exact duplicate rows detected in raw data",
-   "statement": "The raw dataset contained 12 exact duplicate rows, representing 2.91% of the original 412 records.",
-   "severity": "warning",
-   "recommendation": "Remove exact duplicates prior to model training to avoid data leakage and bias."
-  },
-  {
    "title": "Severe data leakage in refund amount",
-   "statement": "The refund_amount column separates the target variable churned almost perfectly with an AUC value of 1.0.",
+   "statement": "The refund_amount column exhibits severe data leakage, separating the target almost perfectly with an AUC value of 1.0.",
    "severity": "critical",
-   "recommendation": "Exclude refund_amount from feature sets for predictive modeling of customer churn."
+   "recommendation": "Remove refund_amount from the feature set before training predictive models to avoid target leakage."
   },
   {
-   "title": "Missing values and hidden tokens in region",
-   "statement": "The region column had 10.68% missing values along with 44 hidden-missing tokens and case variants.",
-   "severity": "warning",
-   "recommendation": "Standardize categorical text formatting and apply missingness indicators or mode imputation."
-  },
-  {
-   "title": "Heavy right-skewness and outliers in revenue",
-   "statement": "Revenue exhibits a high skew of 19.21 and contains 76 IQR outliers across the distribution.",
-   "severity": "warning",
-   "recommendation": "Apply logarithmic transformations or robust scaling to mitigate the influence of extreme revenue values."
-  },
-  {
-   "title": "Target class imbalance in dataset",
-   "statement": "The target variable churned shows a class balance of 75.24% for no and 24.76% for yes.",
+   "title": "Raw data quality improvements after cleaning",
+   "statement": "The overall data quality score improved from 79.7 out of 100 to 100.0 out of 100 after removing duplicates, imputing missing values, and dropping leaky or constant columns.",
    "severity": "info",
-   "recommendation": "Account for class imbalance using appropriate evaluation metrics like ROC-AUC or balancing techniques."
+   "recommendation": "Use the cleaned dataset for downstream modeling tasks."
   },
   {
-   "title": "Data quality score improvement post-cleaning",
-   "statement": "The data quality score increased from 79.7 out of 100 in the raw dataset to 100.0 out of 100 in the cleaned dataset.",
+   "title": "Duplicate rows identified and removed",
+   "statement": "The raw dataset contained 12 exact duplicate rows, representing 2.91 percent of the total data, which were removed during cleaning.",
+   "severity": "warning",
+   "recommendation": "Verify the data ingestion pipeline to prevent duplicate order generation."
+  },
+  {
+   "title": "Missing values and hidden tokens in region and quantity",
+   "statement": "The region column had 10.68 percent missing values alongside 44 hidden-missing tokens, while quantity had 17.96 percent missing values with 74 hidden-missing tokens.",
+   "severity": "warning",
+   "recommendation": "Retain the missing indicator flags created during cleaning to preserve information about missingness patterns."
+  },
+  {
+   "title": "Extreme skewness and outliers in revenue",
+   "statement": "Revenue showed extreme right-skewness with a skew value of 19.21 and 76 IQR outliers in the raw data.",
+   "severity": "warning",
+   "recommendation": "Monitor the winsorized revenue feature during modeling to manage the impact of extreme values."
+  },
+  {
+   "title": "Strong correlation between unit price and revenue",
+   "statement": "In the cleaned dataset, unit_price and revenue exhibit a strong positive Pearson correlation coefficient of 0.81.",
    "severity": "info",
-   "recommendation": "Use the fully cleaned dataset for downstream exploratory analysis and predictive modeling."
+   "recommendation": "Evaluate multicollinearity if including both unit price and revenue in linear models."
+  },
+  {
+   "title": "Target class distribution for churn",
+   "statement": "The target variable churned has a class balance of 75.24 percent for the 'no' class and 24.76 percent for the 'yes' class in the raw dataset.",
+   "severity": "info",
+   "recommendation": "Account for class imbalance using appropriate evaluation metrics or resampling techniques."
   }
  ],
  "narrative": {
-  "headline": "Dataset cleaned and prepared for churn prediction after resolving critical data leakage and quality issues.",
-  "executive_summary": "The raw dataset had a quality score of 79.7 out of 100 before cleaning and improved to 100.0 out of 100 after cleaning. We removed 12 exact duplicate rows, representing 2.91% of the original 412 records, and dropped the refund_amount column because it caused severe data leakage with an AUC value of 1.0. The target variable churned exhibits a class balance of 75.24% for no and 24.76% for yes. Additionally, we handled 10.68% missing values in the region column and addressed 76 IQR outliers in revenue, which has a skew of 19.21.",
+  "headline": "Dataset cleaned and data leakage resolved for customer churn prediction.",
+  "executive_summary": "The dataset quality score improved from 79.7 out of 100 to 100.0 out of 100 after cleaning. Critical data leakage in the refund_amount column was identified and removed, alongside 12 exact duplicate rows representing 2.91 percent of the data. Missing values and hidden-missing tokens were addressed in region and quantity, while extreme skewness in revenue was managed. The target variable churned currently has a class balance of 75.24 percent for the 'no' class and 24.76 percent for the 'yes' class.",
   "next_steps": [
-   "Train baseline classification models using the cleaned dataset of 400 records.",
-   "Account for the target class imbalance of 75.24% to 24.76% during model training.",
-   "Evaluate feature importance while ensuring no additional data leakage occurs.",
-   "Monitor the handling of revenue outliers and their impact on model performance."
+   "Verify model performance without the leaked refund_amount feature.",
+   "Handle the class imbalance of 75.24 percent 'no' and 24.76 percent 'yes' in the churned target variable.",
+   "Utilize the added missing indicator flags for region and quantity during feature engineering.",
+   "Train baseline classification models using the cleaned dataset of 400 rows."
   ]
  },
  "notes": [],
@@ -76,23 +82,23 @@
    "op": "standardize_null_tokens",
    "description": "Turn missing-value tokens ('N/A', '-', '?', 'null', '') into real missing values.",
    "changes": "Changed 44 values in 'region', all now missing (e.g. 'N/A' \u2192 (missing)); changed 74 values in 'quantity', all now missing (e.g. '-' \u2192 (missing); '?' \u2192 (missing); 'N/A' \u2192 (missing)); changed 412 values in 'notes', all now missing (e.g. '' \u2192 (missing)).",
-   "rationale": "Standardize all hidden missing tokens across the dataset.",
+   "rationale": "Turn hidden-missing tokens into real missing values across all columns.",
    "columns": []
   },
   {
-   "op": "parse_dates",
-   "description": "Convert text dates in any common format to dates.",
-   "changes": "Converted 'order_date' to dates; changed 278 values in 'order_date' (e.g. '22 Dec 2025' \u2192 2025-12-22; '04 May 2025' \u2192 2025-05-04; '12/02/2025' \u2192 2025-12-02).",
-   "rationale": "Convert order_date to datetime format.",
+   "op": "parse_boolean",
+   "description": "Convert yes/no, true/false, 1/0 to booleans.",
+   "changes": "Converted 'churned' to true/false; changed 412 values in 'churned' (e.g. 'no' \u2192 False; 'yes' \u2192 True).",
+   "rationale": "Fix the target column type to boolean.",
    "columns": [
-    "order_date"
+    "churned"
    ]
   },
   {
    "op": "strip_currency",
    "description": "Convert amounts like '$1,204.50' to numbers.",
    "changes": "Converted 'unit_price' to numbers; changed 412 values in 'unit_price' (e.g. '$1,192.90' \u2192 1192.9; '$11.60' \u2192 11.6; '$11.40' \u2192 11.4).",
-   "rationale": "Convert currency formatted unit_price to numeric type before outlier operations.",
+   "rationale": "Convert currency text to numeric values before performing numeric operations.",
    "columns": [
     "unit_price"
    ]
@@ -101,61 +107,34 @@
    "op": "cast_numeric",
    "description": "Convert text numbers to numbers (unparseable -> missing).",
    "changes": "Converted 'quantity' to numbers; converted 'revenue' to numbers; changed 38 values in 'revenue' (e.g. '919.50' \u2192 919.5; '9010.50' \u2192 9010.5; '305.90' \u2192 305.9).",
-   "rationale": "Convert quantity and revenue from text to numeric so mathematical operations and imputations can succeed.",
+   "rationale": "Convert text numeric columns to actual numbers so calculations and imputations can proceed.",
    "columns": [
     "quantity",
     "revenue"
    ]
   },
   {
-   "op": "normalize_case",
-   "description": "Make text consistent in case, so 'north', 'North', and 'NORTH' become one value.",
-   "changes": "Changed 198 values in 'region' (e.g. 'south' \u2192 'South'; 'north' \u2192 'North'; 'North ' \u2192 'North').",
-   "rationale": "Standardize region text case variants to title case.",
+   "op": "drop_columns",
+   "description": "Drop specific columns, for example a column that leaks the target.",
+   "changes": "Removed column(s) refund_amount.",
+   "rationale": "Remove refund_amount as it exhibits severe data leakage separating the target almost perfectly.",
    "columns": [
-    "region"
-   ]
-  },
-  {
-   "op": "parse_boolean",
-   "description": "Convert yes/no, true/false, 1/0 to booleans.",
-   "changes": "Converted 'churned' to true/false; changed 412 values in 'churned' (e.g. 'no' \u2192 False; 'yes' \u2192 True).",
-   "rationale": "Ensure target column churned is properly parsed as boolean.",
-   "columns": [
-    "churned"
-   ]
-  },
-  {
-   "op": "mark_as_id",
-   "description": "Mark identifier columns so they're left out of statistics.",
-   "changes": "Nothing needed changing: the data already met this rule.",
-   "rationale": "Mark order_id as an identifier column.",
-   "columns": [
-    "order_id"
+    "refund_amount"
    ]
   },
   {
    "op": "drop_empty_columns",
    "description": "Drop columns with no values at all.",
    "changes": "Removed column(s) notes.",
-   "rationale": "Drop columns with no values at all.",
+   "rationale": "Drop the notes column as it is 100 percent empty.",
    "columns": []
   },
   {
    "op": "drop_constant_columns",
    "description": "Drop columns that hold a single value.",
    "changes": "Removed column(s) currency.",
-   "rationale": "Drop constant columns that hold a single value.",
+   "rationale": "Drop the currency column as it holds a single constant value.",
    "columns": []
-  },
-  {
-   "op": "drop_columns",
-   "description": "Drop specific columns, for example a column that leaks the target.",
-   "changes": "Removed column(s) refund_amount.",
-   "rationale": "Drop refund_amount because it leaks the target variable churned.",
-   "columns": [
-    "refund_amount"
-   ]
   },
   {
    "op": "drop_exact_duplicates",
@@ -165,10 +144,37 @@
    "columns": []
   },
   {
+   "op": "mark_as_id",
+   "description": "Mark identifier columns so they're left out of statistics.",
+   "changes": "Nothing needed changing: the data already met this rule.",
+   "rationale": "Mark order_id as an identifier column so it is excluded from statistics.",
+   "columns": [
+    "order_id"
+   ]
+  },
+  {
+   "op": "trim_whitespace",
+   "description": "Remove spaces around text values.",
+   "changes": "Changed 54 values in 'region' (e.g. 'North ' \u2192 'North').",
+   "rationale": "Clean trailing or leading whitespace in the region column.",
+   "columns": [
+    "region"
+   ]
+  },
+  {
+   "op": "normalize_case",
+   "description": "Make text consistent in case, so 'north', 'North', and 'NORTH' become one value.",
+   "changes": "Changed 139 values in 'region' (e.g. 'south' \u2192 'South'; 'north' \u2192 'North'; 'WEST' \u2192 'West').",
+   "rationale": "Resolve case variants in the region column.",
+   "columns": [
+    "region"
+   ]
+  },
+  {
    "op": "add_missing_indicator",
    "description": "Add a <column>_was_missing flag before imputing, so the information isn't lost.",
    "changes": "Marked 43 rows in a new 'region_was_missing' column; marked 74 rows in a new 'quantity_was_missing' column.",
-   "rationale": "Add missing indicators before imputation since missingness exceeds 5%.",
+   "rationale": "Add missing indicator flags for region and quantity since their missingness exceeds 5 percent.",
    "columns": [
     "region",
     "quantity"
@@ -178,7 +184,7 @@
    "op": "impute_mode",
    "description": "Fill missing values with the most common value.",
    "changes": "Changed 43 values in 'region' (e.g. (missing) \u2192 'North').",
-   "rationale": "Impute missing categorical values in region using the mode.",
+   "rationale": "Impute missing categorical values in region using the most common value.",
    "columns": [
     "region"
    ]
@@ -195,18 +201,28 @@
   {
    "op": "flag_outliers",
    "description": "Add a <column>_outlier flag using the 1.5 x IQR rule.",
-   "changes": "Marked 93 rows in a new 'unit_price_outlier' column; marked 74 rows in a new 'revenue_outlier' column.",
-   "rationale": "Flag heavy-tailed outliers in unit_price and revenue using the 1.5x IQR rule.",
+   "changes": "Marked 74 rows in a new 'revenue_outlier' column; marked 93 rows in a new 'unit_price_outlier' column.",
+   "rationale": "Flag extreme outliers in revenue and unit_price instead of deleting them.",
    "columns": [
-    "unit_price",
-    "revenue"
+    "revenue",
+    "unit_price"
+   ]
+  },
+  {
+   "op": "winsorize",
+   "description": "Cap extreme values at the given quantiles.",
+   "changes": "Changed 8 values in 'unit_price' (e.g. 11.32 \u2192 11.3699; 1322.24 \u2192 1317.36; 1324.78 \u2192 1317.36); changed 8 values in 'revenue' (e.g. 21885.1 \u2192 21406.7; 11.66 \u2192 11.9372; 23652.5 \u2192 21406.7).",
+   "rationale": "Cap extreme skewness and outliers in revenue and unit_price safely.",
+   "columns": [
+    "revenue",
+    "unit_price"
    ]
   },
   {
    "op": "standardize_column_names",
    "description": "Rename columns to snake_case. Put this last: later steps would need the new names.",
    "changes": "Nothing needed changing: the data already met this rule.",
-   "rationale": "Rename columns to snake_case as the final step.",
+   "rationale": "Rename all columns to snake_case as the final step.",
    "columns": []
   }
  ],

@@ -515,6 +515,11 @@ class EDAFlow(Flow[EDAState]):
             self._step(
                 "Kept the findings that passed the fact check", f"{len(passing)} kept", "warning"
             )
+            self._message(
+                self._analyst(), "Senior Reviewer", "findings for review",
+                "Only these passed the fact check; the others are withheld:\n"
+                + self._findings_text(),
+            )  # fmt: skip
             return
         report = parse_output(result.tasks_output[0], FindingsReport)
         self.state.findings = [f.model_dump() for f in report.findings]

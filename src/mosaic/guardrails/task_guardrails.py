@@ -114,6 +114,19 @@ def triage_guardrail(ctx: GuardContext) -> Guardrail:
                     f"Use an exact name from {ctx.columns} or null."
                 ],
             )
+        if brief.target_column and ctx.df is not None and brief.target_column in ctx.df:
+            values = ctx.df[brief.target_column].dropna().astype(str)
+            numeric = pd.to_numeric(values, errors="coerce").notna().mean() > 0.9
+            if len(values) >= 20 and not numeric and values.nunique() >= 0.95 * len(values):
+                return _reject(
+                    ctx,
+                    "Triage picked an identifier as the target",
+                    [
+                        f"target_column '{brief.target_column}' has a different value in almost "
+                        "every row (like an ID or a file name), so a model can't predict it. "
+                        "Pick the column that holds the label or outcome, or use null."
+                    ],
+                )
         return True, output
 
     return check

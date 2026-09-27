@@ -127,7 +127,8 @@
     for (const [x, y] of points) {
       const [x0, y0] = at(el);
       const dist = Math.hypot(x - x0, y - y0);
-      const ms = reduce ? 1 : (dist / SPEED) * 1000;
+      const hurry = queue.length > 3 ? 2 : 1; // walk faster when the office is behind
+      const ms = reduce ? 1 : (dist / (SPEED * hurry)) * 1000;
       const start = performance.now();
       await new Promise((resolve) => {
         function step(now) {
@@ -214,22 +215,10 @@
     }
   }
 
-  // the last scene: everyone brings their part to Quill, who delivers the report
+  // the last scene: the handoffs already happened (they come from the agents' messages),
+  // so Quill finishes the report, carries it to your corner, and the team gathers there
   async function finale(a) {
     setWorking(null);
-    caption("Pip brings the final findings to Rex");
-    await visit("Pip", "Rex", "Final findings!", { stay: 1100 });
-    caption("Rex signs off");
-    say("Rex", "Checked. Approved!", 1600);
-    await hop(["Rex"]);
-    await wait(1300);
-    caption("Rex takes the approved findings to Quill");
-    await visit("Rex", "Quill", "All yours, Quill!", { stay: 1100 });
-    caption("Tilly and Mop add their notes");
-    await Promise.all([
-      visit("Tilly", "Quill", "Data notes!", { stay: 1200 }),
-      visit("Mop", "Quill", "Cleaning log!", { slot: "guest2", stay: 1200 }),
-    ]);
     caption("Quill puts the report together");
     setWorking("Quill");
     say("Quill", "Writing...", 1600);
@@ -280,25 +269,27 @@
     },
     async handoff(a) {
       setWorking(null);
-      await visit(a.from, a.to, a.say, { red: a.say === "Please revise" });
+      caption(a.caption);
+      await visit(a.from, a.to, a.say, { red: a.red || a.say === "Please revise" });
     },
     async reject(a) {
       const crt = member(a.who)?.querySelector(".crt");
       if (!crt) return;
       crt.classList.add("carrying", "marked", "stressed");
       say(a.who, a.say);
-      caption(`${a.who} is fixing something the fact check caught`);
+      caption(a.caption || `${a.who} is fixing something a check caught`);
       await wait(1400);
       crt.classList.remove("carrying", "marked", "stressed");
     },
     async say(a) {
+      caption(a.caption);
       say(a.who, a.say);
       await wait(900);
     },
     async approve(a) {
       const crt = member(a.who)?.querySelector(".crt");
       say(a.who, a.say);
-      caption("Rex approved the findings");
+      caption(a.caption || "Rex approved the findings");
       if (crt) {
         crt.classList.add("hop");
         await wait(450);
@@ -369,7 +360,12 @@
     if (fresh.length) {
       seen = fresh[fresh.length - 1].id;
       queue.push(...fresh);
-      if (queue.length > 8) queue = [queue[0], ...queue.slice(-6)];
+      // falling behind: drop small moments, never the conversation (walks, approvals,
+      // the ending), so every handoff the agents made is still acted out
+      if (queue.length > 8) {
+        const keep = new Set(["deliver", "handoff", "approve", "finale", "done", "fail"]);
+        queue = queue.filter((a, i) => keep.has(a.type) || i >= queue.length - 2);
+      }
       drain();
     }
   }

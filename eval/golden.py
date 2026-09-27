@@ -183,7 +183,7 @@ DATASETS: dict[str, dict] = {
             {
                 "id": "dark_blank",
                 "what": "3 very dark and 1 blank image",
-                "patterns": [r"\bdark|blank|uniform"],
+                "patterns": [r"\bdark\b|too dark|\bblank\b|near.?blank"],
                 "ops": ["drop_too_dark", "drop_near_blank"],
             },
             {
@@ -588,7 +588,9 @@ DATASETS: dict[str, dict] = {
             {
                 "id": "humidity_over_100",
                 "what": "Humidity above 100%",
-                "patterns": [r"humidity.{0,80}(100|above|exceed|impossible|invalid|over)"],
+                "patterns": [
+                    r"humidity[^.]{0,80}\b(100|above|exceed\w*|impossible|invalid|over)\b"
+                ],
             },
             {
                 "id": "duplicates",

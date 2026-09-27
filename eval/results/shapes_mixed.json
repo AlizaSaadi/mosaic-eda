@@ -4,149 +4,185 @@
  "status": "done",
  "error": "",
  "modality": "mixed",
- "seconds": 63,
+ "seconds": 99,
  "counters": {
   "tool_runs": 27,
-  "model_calls": 26,
-  "llm_calls": 25,
+  "model_calls": 24,
+  "llm_calls": 23,
   "guardrail_catches": 4,
-  "self_corrections": 8,
-  "facts_verified": 3,
-  "review_rounds": 7
+  "self_corrections": 6,
+  "fallbacks": 1,
+  "facts_verified": 6,
+  "review_rounds": 6
  },
- "revisions": 2,
+ "revisions": 1,
  "fact_check_rejections": 3,
  "first_findings_passed": false,
  "items_before": 76,
  "items_after": 75,
  "quality_raw": 92.4,
- "quality_clean": 95.6,
+ "quality_clean": 97.7,
  "findings": [
   {
-   "title": "Files exist without table descriptions",
-   "statement": "4 files have no corresponding table row out of 38 total files.",
+   "title": "Table annotations point to missing images",
+   "statement": "3 table rows reference image files that are not present in the dataset.",
    "severity": "warning",
-   "recommendation": "Add table annotations for the unreferenced files or remove them from the dataset."
+   "recommendation": "Remove the 3 orphaned rows or locate the missing image files to ensure data integrity."
   },
   {
-   "title": "Label and folder mismatches found",
-   "statement": "3 rows have label columns that disagree with their respective image folder paths.",
+   "title": "Unreferenced images exist in the dataset",
+   "statement": "4 image files are present in the directory but have no corresponding rows in the annotations table.",
+   "severity": "warning",
+   "recommendation": "Verify if these 4 images should be included and update the annotations table accordingly."
+  },
+  {
+   "title": "Label disagreements between table and folder structure",
+   "statement": "3 rows show a label in the table that contradicts the folder name where the image is stored.",
    "severity": "critical",
-   "recommendation": "Audit and correct the conflicting labels in the table or the file paths."
+   "recommendation": "Audit the 3 conflicting records to determine the correct label and resolve the discrepancy."
   },
   {
-   "title": "Data quality score improved",
-   "statement": "The data quality score increased from 85.1 to 91.4 out of 100 after cleaning operations.",
+   "title": "Dataset quality bottleneck",
+   "statement": "The table quality of 95.7 out of 100 is significantly lower than the image quality of 99.7 out of 100, limiting the overall dataset reliability.",
+   "severity": "warning",
+   "recommendation": "Prioritize further cleaning of the annotations table to match the high quality of the image data."
+  },
+  {
+   "title": "Multiple table rows reference the same image file",
+   "statement": "1 file is referenced by more than one row in the annotations table.",
+   "severity": "warning",
+   "recommendation": "Inspect the duplicate references to ensure they are intentional and not an artifact duplication error."
+  },
+  {
+   "title": "Dataset quality score improved",
+   "statement": "The overall data quality score increased from 85.1 out of 100 in the raw dataset to 95.7 out of 100 in the cleaned dataset.",
    "severity": "info",
    "recommendation": "",
    "type": "table"
   },
   {
-   "title": "Duplicate rows removed",
-   "statement": "The initial dataset contained 1 duplicate row, which accounted for 2.63% of the original dataset size, and was removed during cleaning.",
+   "title": "Exact duplicate rows removed",
+   "statement": "The raw dataset contained 1 exact duplicate rows, accounting for 2.63% of the data, which were removed during cleaning.",
    "severity": "warning",
    "recommendation": "",
    "type": "table"
   },
   {
-   "title": "Missing values in notes column",
-   "statement": "The notes column in the cleaned dataset remains significantly incomplete with 43.24% missing values, limiting its utility for model training.",
-   "severity": "info",
-   "recommendation": "",
-   "type": "table"
-  },
-  {
-   "title": "Confidence score distribution",
-   "statement": "Confidence scores are relatively stable with a mean of 86.16 and a median of 86.0, showing a slight negative skew of -0.3.",
-   "severity": "info",
-   "recommendation": "",
-   "type": "table"
-  },
-  {
-   "title": "Area pixel distribution",
-   "statement": "The area_px column has a mean of 4979.81 and a median of 4838.0, with a negative skew of -0.2.",
-   "severity": "info",
-   "recommendation": "",
-   "type": "table"
-  },
-  {
-   "title": "Small dataset size risk",
-   "statement": "The dataset is extremely small, containing only 37 rows, which poses a high risk of overfitting for an image classifier.",
+   "title": "Imputation bias in small dataset",
+   "statement": "The confidence and area_px columns had 2.63% missingness in the 37-row dataset; median imputation may introduce bias.",
    "severity": "critical",
    "recommendation": "",
    "type": "table"
   },
   {
-   "title": "Annotator imbalance",
-   "statement": "The 'annotator' column shows significant imbalance, with 'ana' having 16 entries while 'chen' has 6, which could introduce annotator bias.",
+   "title": "Class distribution imbalance",
+   "statement": "The target label column shows significant class imbalance with 17 circle, 11 square, and 9 triangle instances out of 37 total rows.",
    "severity": "warning",
    "recommendation": "",
    "type": "table"
   },
   {
-   "title": "Small dataset size",
-   "statement": "The dataset contains only 38 images, which is a very small sample size for training a robust image classifier.",
+   "title": "Notes column high missingness",
+   "statement": "The notes column has a high missing percentage of 43.24% in the cleaned dataset.",
+   "severity": "info",
+   "recommendation": "",
+   "type": "table"
+  },
+  {
+   "title": "Annotator distribution present",
+   "statement": "Annotations are distributed among multiple annotators with 37 total rows remaining in the cleaned dataset.",
+   "severity": "info",
+   "recommendation": "",
+   "type": "table"
+  },
+  {
+   "title": "Insufficient dataset size",
+   "statement": "The dataset is extremely small, containing only 37 rows, which is likely insufficient for training a robust image classifier and risks severe overfitting.",
+   "severity": "critical",
+   "recommendation": "",
+   "type": "table"
+  },
+  {
+   "title": "Potential image data leakage",
+   "statement": "The 'image' column contains multiple entries for the same file (e.g., circle_007.jpg), suggesting potential data leakage or duplicate images that were not fully resolved.",
+   "severity": "warning",
+   "recommendation": "",
+   "type": "table"
+  },
+  {
+   "title": "Small total sample size",
+   "statement": "The dataset contains 38 images, which represents a limited sample size for training an image classifier.",
    "severity": "warning",
    "recommendation": "",
    "type": "image"
   },
   {
    "title": "High risk of overfitting",
-   "statement": "The dataset is extremely small with only 38 images total, which poses a high risk of overfitting regardless of data augmentation.",
+   "statement": "The dataset size of 38 images is extremely small for training a robust classifier, which poses a high risk of overfitting regardless of augmentation.",
    "severity": "critical",
    "recommendation": "",
    "type": "image"
   },
   {
-   "title": "Class imbalance present",
-   "statement": "The classes are imbalanced with 16 circles, 12 squares, and 10 triangles, resulting in an imbalance ratio of 1.6.",
+   "title": "Class balance and category counts",
+   "statement": "The dataset includes 16 circles (42.11%), 12 squares (31.58%), and 10 triangles (26.32%), with a largest to smallest ratio of 1.6.",
    "severity": "info",
    "recommendation": "",
    "type": "image"
   },
   {
-   "title": "High image quality",
-   "statement": "The dataset achieved a high quality score of 99.7 out of 100, with no corrupt, blurry, or duplicate images detected.",
+   "title": "Absence of duplicates and cross-class leakage",
+   "statement": "There are 0 exact duplicate groups and 0 cross-class duplicate files present in the dataset.",
    "severity": "info",
    "recommendation": "",
    "type": "image"
   },
   {
-   "title": "Consistent image format",
-   "statement": "All 38 images are in JPEG format and RGB mode, ensuring consistency for the input layer of the model.",
+   "title": "High image quality scores",
+   "statement": "The image data quality score is 99.7 out of 100, with 0 blurry, dark, bright, or tiny images observed.",
    "severity": "info",
    "recommendation": "",
    "type": "image"
   },
   {
-   "title": "AI-reviewed labels",
-   "statement": "An AI model review of the 38 images identified no suspected mislabels, though this observation does not constitute a ground-truth verification of the labels.",
+   "title": "Consistent image resolution and mode",
+   "statement": "All 38 images maintain a uniform RGB mode and a width of 128.0 pixels.",
+   "severity": "info",
+   "recommendation": "",
+   "type": "image"
+  },
+  {
+   "title": "Automated vision review observations",
+   "statement": "Based on an automated heuristic vision review, 0 suspected mislabels were found across the 38 inspected shape images.",
+   "severity": "info",
+   "recommendation": "",
+   "type": "image"
+  },
+  {
+   "title": "Cleaning summary retention",
+   "statement": "Cleaning steps modified 0 images, keeping the total count at 38.",
    "severity": "info",
    "recommendation": "",
    "type": "image"
   }
  ],
  "narrative": {
-  "headline": "High quality image formats but extreme risk of overfitting due to small sample size.",
-  "executive_summary": "The shapes_survey dataset exhibits a high average data quality score of 92.4 out of 100 before cleaning and 95.6 after cleaning. However, it contains only 38 total files and 37 table rows, posing a severe risk of overfitting for an image classifier. Cleaning resolved issues like label and folder mismatches and removed 1 duplicate row, while images maintained consistent JPEG format and RGB mode. Class imbalance is present with 16 circles, 12 squares, and 10 triangles.",
+  "headline": "Dataset quality score improved to an average of 97.7 out of 100, but sample size remains critically low for training an image classifier.",
+  "executive_summary": "The shapes_survey.zip dataset contains 38 images and 37 rows after cleaning, achieving an average data quality score of 97.7 out of 100 across types. While image quality is high at 99.7 out of 100 with consistent RGB mode and 128.0 pixel width, table quality is lower at 95.7 out of 100. Critical risks include an extremely small sample size of 37 rows and 38 images leading to a high risk of overfitting, 3 rows with label disagreements between the table and folder structure, and missing images referenced by table rows. Additionally, class distribution shows 17 circle, 11 square, and 9 triangle instances in the table.",
   "next_steps": [
-   "Apply aggressive data augmentation to mitigate the extreme risk of overfitting from the 38 images.",
-   "Address the class imbalance across circles, squares, and triangles.",
-   "Resolve the 4 missing table descriptions and 3 label and folder mismatches.",
-   "Account for annotator bias stemming from the imbalance between 'ana' with 16 entries and 'chen' with 6 entries.",
-   "Handle the 43.24% missing values in the notes column before utilizing it for training."
+   "Resolve the 3 table rows referencing missing image files and the 4 unreferenced image files in the directory.",
+   "Fix the 3 label disagreements between the table annotations and folder names.",
+   "Address potential data leakage caused by multiple table rows referencing the same image file.",
+   "Collect additional data to mitigate the high risk of overfitting caused by the small sample size of 37 rows and 38 images."
   ]
  },
- "notes": [
-  "Withheld after review (still misleading after revisions): Table rows point to missing image files; Multiple rows reference the same file",
-  "The reviewer noted these weren't covered: The evidence shows 1 file is referenced by more than one row, which is not covered by any finding."
- ],
+ "notes": [],
  "cleaning": [
   {
    "op": "standardize_null_tokens",
    "description": "Turn missing-value tokens ('N/A', '-', '?', 'null', '') into real missing values.",
    "changes": "Changed 1 value in 'confidence', all now missing (e.g. 'N/A' \u2192 (missing)); changed 1 value in 'area_px', all now missing (e.g. 'N/A' \u2192 (missing)); changed 17 values in 'notes', all now missing (e.g. '' \u2192 (missing); 'N/A' \u2192 (missing)).",
-   "rationale": "Standardize hidden-missing tokens across all columns to true missing values.",
+   "rationale": "Turn missing-value tokens into real missing values across all columns.",
    "columns": [],
    "type": "table"
   },
@@ -154,7 +190,7 @@
    "op": "parse_percent",
    "description": "Convert '10%' to 10.0 (or 0.10 with as_fraction).",
    "changes": "Converted 'confidence' to numbers; changed 37 values in 'confidence' (e.g. '70%' \u2192 70; '95%' \u2192 95; '96%' \u2192 96).",
-   "rationale": "Convert confidence percentage values to numeric format.",
+   "rationale": "Convert percentage values in confidence to numeric format.",
    "columns": [
     "confidence"
    ],
@@ -164,7 +200,7 @@
    "op": "cast_numeric",
    "description": "Convert text numbers to numbers (unparseable -> missing).",
    "changes": "Converted 'area_px' to numbers.",
-   "rationale": "Convert area_px text values to numeric format so that subsequent numeric operations succeed.",
+   "rationale": "Ensure area_px is stored as a numeric type for further operations.",
    "columns": [
     "area_px"
    ],
@@ -174,69 +210,9 @@
    "op": "mark_as_id",
    "description": "Mark identifier columns so they're left out of statistics.",
    "changes": "Nothing needed changing: the data already met this rule.",
-   "rationale": "Designate the target/image column as an identifier to exclude it from statistics.",
+   "rationale": "Mark the image column as an identifier so it is excluded from statistics.",
    "columns": [
     "image"
-   ],
-   "type": "table"
-  },
-  {
-   "op": "add_missing_indicator",
-   "description": "Add a <column>_was_missing flag before imputing, so the information isn't lost.",
-   "changes": "Marked 1 row in a new 'confidence_was_missing' column.",
-   "rationale": "Add a missingness flag for confidence before imputation.",
-   "columns": [
-    "confidence"
-   ],
-   "type": "table"
-  },
-  {
-   "op": "impute_median",
-   "description": "Fill missing numbers with the column median.",
-   "changes": "Changed 1 value in 'confidence' (e.g. (missing) \u2192 86).",
-   "rationale": "Impute missing confidence values using the column median.",
-   "columns": [
-    "confidence"
-   ],
-   "type": "table"
-  },
-  {
-   "op": "flag_outliers",
-   "description": "Add a <column>_outlier flag using the 1.5 x IQR rule.",
-   "changes": "Marked 0 rows in a new 'confidence_outlier' column.",
-   "rationale": "Flag potential outliers in confidence using the 1.5 x IQR rule.",
-   "columns": [
-    "confidence"
-   ],
-   "type": "table"
-  },
-  {
-   "op": "add_missing_indicator",
-   "description": "Add a <column>_was_missing flag before imputing, so the information isn't lost.",
-   "changes": "Marked 1 row in a new 'area_px_was_missing' column.",
-   "rationale": "Add a missingness flag for area_px before imputation.",
-   "columns": [
-    "area_px"
-   ],
-   "type": "table"
-  },
-  {
-   "op": "impute_median",
-   "description": "Fill missing numbers with the column median.",
-   "changes": "Changed 1 value in 'area_px' (e.g. (missing) \u2192 4838).",
-   "rationale": "Impute missing area_px values using the column median.",
-   "columns": [
-    "area_px"
-   ],
-   "type": "table"
-  },
-  {
-   "op": "flag_outliers",
-   "description": "Add a <column>_outlier flag using the 1.5 x IQR rule.",
-   "changes": "Marked 0 rows in a new 'area_px_outlier' column.",
-   "rationale": "Flag potential outliers in area_px using the 1.5 x IQR rule.",
-   "columns": [
-    "area_px"
    ],
    "type": "table"
   },
@@ -244,23 +220,34 @@
    "op": "drop_exact_duplicates",
    "description": "Remove rows that are exact copies.",
    "changes": "Removed 1 row.",
-   "rationale": "Remove exact duplicate rows to maintain data integrity.",
+   "rationale": "Remove exact duplicate rows to clean up redundant records in the dataset.",
    "columns": [],
+   "type": "table"
+  },
+  {
+   "op": "impute_median",
+   "description": "Fill missing numbers with the column median.",
+   "changes": "Changed 1 value in 'confidence' (e.g. (missing) \u2192 86); changed 1 value in 'area_px' (e.g. (missing) \u2192 4966).",
+   "rationale": "Impute missing numeric values using the column median since missingness is below 5%.",
+   "columns": [
+    "confidence",
+    "area_px"
+   ],
    "type": "table"
   },
   {
    "op": "standardize_column_names",
    "description": "Rename columns to snake_case. Put this last: later steps would need the new names.",
    "changes": "Nothing needed changing: the data already met this rule.",
-   "rationale": "Rename columns to consistent snake_case format.",
+   "rationale": "Rename columns to standard snake_case as the final step.",
    "columns": [],
    "type": "table"
   },
   {
-   "op": "fix_exif_orientation",
-   "description": "Rotate images upright using their EXIF orientation tag.",
-   "changes": "Marked 38 images: fix orientation.",
-   "rationale": "Rotate images upright using their EXIF orientation tag.",
+   "op": "remove_corrupt",
+   "description": "Remove files that can't be opened as images.",
+   "changes": "Nothing needed changing: the data already met this rule.",
+   "rationale": "No corrupt images are present in the dataset, but remove_corrupt is included as a standard prerequisite step.",
    "columns": [],
    "type": "image"
   },
@@ -268,7 +255,7 @@
    "op": "convert_to_rgb",
    "description": "Convert grayscale, palette, and transparent images to RGB (transparency on white).",
    "changes": "Marked 38 images: to rgb.",
-   "rationale": "Ensure all images are in RGB mode for consistent model training.",
+   "rationale": "Ensure consistent RGB format across all images as indicated in the overview.",
    "columns": [],
    "type": "image"
   }

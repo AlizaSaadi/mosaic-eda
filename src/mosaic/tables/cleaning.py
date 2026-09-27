@@ -18,6 +18,8 @@ from mosaic.tables.load import LoadedTable
 from mosaic.tables.ops import OPS, CleaningPlan, Risk, op_code, run_code
 
 CONVERSIONS = {"strip_currency", "parse_percent", "cast_numeric", "parse_dates", "parse_boolean"}
+IMPUTATIONS = {"impute_median", "impute_mode", "impute_constant"}
+MAX_IMPUTE = 0.40  # filling in more of a column than this invents most of its values
 MAX_ROW_LOSS = 0.30
 MAX_NEW_MISSING = 0.10
 FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
@@ -232,6 +234,21 @@ def execute_plan(
                 run.errors.append(f"{label}: cites evidence IDs that don't exist: {unknown}.")
                 continue
         before = work
+        if op.op in IMPUTATIONS and catalog is OPS:
+            too_empty = {
+                col: share
+                for col in op.columns
+                if col in before
+                and (share := float(pipeline_helpers.is_missing(before[col]).mean())) > MAX_IMPUTE
+            }
+            if too_empty:
+                shown = ", ".join(f"'{c}' ({s:.0%} missing)" for c, s in too_empty.items())
+                run.errors.append(
+                    f"{label}: would make up most of {shown}. Filling in more than "
+                    f"{MAX_IMPUTE:.0%} of a column invents data; use add_missing_indicator, leave "
+                    "the values missing, or drop the column."
+                )
+                continue
         try:
             after = run_code(code, before.copy(), namespace)
         except Exception as exc:

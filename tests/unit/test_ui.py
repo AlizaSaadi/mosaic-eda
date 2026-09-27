@@ -16,38 +16,87 @@ def ev(kind, title, t=0.0):
     return RunEvent(ts=t, kind=kind, title=title)
 
 
-def test_run_events_become_office_scenes():
+def msg(sender, recipient, subject, part=""):
+    prefix = f"[{part}] " if part else ""
+    return RunEvent(
+        ts=0.0,
+        kind="message",
+        title=f"{prefix}{sender} to {recipient}: {subject}",
+        data={"sender": sender, "recipient": recipient},
+    )
+
+
+def walks(actions):
+    return [(a["from"], a["to"], a["say"]) for a in actions if a["type"] == "handoff"]
+
+
+def test_the_office_acts_out_the_agents_real_messages():
     events = [
-        ev("step", "Reading your data"),
         ev("agent", "Dataset Triage Lead is working"),
-        ev("agent", "Triage finished"),
+        msg("Dataset Triage Lead", "Cleaning Strategist", "triage brief"),
         ev("agent", "Cleaning Strategist is working"),
+        msg("Cleaning Strategist", "Insight Analyst", "cleaning plan, applied"),
         ev("agent", "Insight Analyst is working"),
         ev("guardrail", "Findings failed the fact check"),
         ev("fix", "Revised output accepted"),
+        msg("Insight Analyst", "Senior Reviewer", "findings for review"),
         ev("agent", "Senior Reviewer is working"),
+        msg("Senior Reviewer", "Insight Analyst", "please revise"),
         ev("review", "Reviewer requested 1 change(s)"),
-        ev("agent", "Insight Analyst is working"),
+        ev("agent", "Insight Analyst is working"),  # used to invent a second "please revise"
+        msg("Insight Analyst", "Senior Reviewer", "revised findings (round 1)"),
+        ev("agent", "Senior Reviewer is working"),
+        msg("Senior Reviewer", "Insight Analyst", "approved"),
         ev("review", "Reviewer approved the findings"),
+        msg("Senior Reviewer", "Report Writer", "final findings to write up"),
         ev("agent", "Report Writer is working"),
+        msg("Report Writer", "you", "your summary"),
         ev("step", "Report ready"),
     ]
     actions = office_actions(events, "coffee")
-    kinds = [(a["type"], a.get("who") or f"{a['from']}->{a['to']}") for a in actions]
-    assert kinds[:4] == [
-        ("deliver", "Tilly"),
-        ("work", "Tilly"),
-        ("handoff", "Tilly->Mop"),
-        ("work", "Mop"),
+    assert actions[0]["type"] == "deliver"
+    assert walks(actions) == [
+        ("Tilly", "Mop", "Here's the brief!"),
+        ("Mop", "Pip", "Data's clean!"),
+        ("Pip", "Rex", "Findings ready"),
+        ("Rex", "Pip", "Please revise"),
+        ("Pip", "Rex", "Revised!"),
+        ("Rex", "Quill", "Write it up!"),
     ]
-    assert ("reject", "Pip") in kinds and ("say", "Pip") in kinds
-    assert ("handoff", "Rex->Pip") in kinds  # a review asking for changes walks back to Pip
+    kinds = [(a["type"], a.get("who")) for a in actions]
+    assert ("reject", "Pip") in kinds and ("say", "Pip") in kinds  # the fact check, then fixed
     assert ("approve", "Rex") in kinds and kinds[-1] == ("finale", "Quill")
     assert [a["id"] for a in actions] == list(range(len(actions)))
     assert office_actions([ev("error", "Run stopped")], "none")[0]["type"] == "fail"
     # the special analysts play Pip's part
     video = office_actions([ev("agent", "Video Synthesizer is working")], "none")
     assert video[0]["who"] == "Pip"
+
+
+def test_a_mixed_runs_parallel_teams_dont_tangle():
+    events = [
+        ev("agent", "Dataset Triage Lead is working"),
+        ev("agent", "Cleaning Strategist is working"),  # the other team, at the same time
+        msg("Dataset Triage Lead", "Cleaning Strategist", "triage brief", "table"),
+        msg("Dataset Triage Lead", "Cleaning Strategist", "triage brief", "image"),
+        ev("agent", "Report Writer is working"),
+        ev("agent", "Insight Analyst is working"),
+        msg("Report Writer", "you", "your summary", "image"),
+        ev("step", "[image] Report ready"),
+        msg("Cross-Type Synthesizer", "Senior Reviewer", "findings for review"),
+    ]
+    actions = office_actions(events, "none")
+    # only messages make walks: no invented Mop -> Tilly or Pip -> Quill trips
+    assert walks(actions) == [
+        ("Tilly", "Mop", "Here's the brief!"),
+        ("Tilly", "Mop", "Here's the brief!"),
+        ("Pip", "Rex", "Findings ready"),
+    ]
+    captions = [a.get("caption", "") for a in actions]
+    assert "Table team: Tilly gives Mop the brief" in captions
+    assert any(c.startswith("Linking the types:") for c in captions)
+    assert not any(a["type"] == "finale" for a in actions)  # one type's report isn't the end
+    assert ("say", "Quill") in [(a["type"], a.get("who")) for a in actions]
 
 
 def test_the_office_and_welcome_scenes_have_the_whole_team():

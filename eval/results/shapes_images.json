@@ -4,18 +4,19 @@
  "status": "done",
  "error": "",
  "modality": "image",
- "seconds": 31,
+ "seconds": 94,
  "counters": {
-  "model_calls": 7,
+  "model_calls": 10,
   "tool_runs": 13,
-  "llm_calls": 6,
-  "guardrail_catches": 1,
-  "facts_verified": 13,
-  "self_corrections": 1,
-  "review_rounds": 1
+  "llm_calls": 9,
+  "fallbacks": 1,
+  "guardrail_catches": 2,
+  "facts_verified": 14,
+  "self_corrections": 3,
+  "review_rounds": 2
  },
- "revisions": 0,
- "fact_check_rejections": 1,
+ "revisions": 1,
+ "fact_check_rejections": 2,
  "first_findings_passed": false,
  "items_before": 123,
  "items_after": 100,
@@ -23,49 +24,56 @@
  "quality_clean": 91.6,
  "findings": [
   {
-   "title": "Dataset quality score improved after cleaning",
-   "statement": "The image data quality score increased from 52.4 out of 100 to 91.6 out of 100 after processing.",
-   "severity": "info",
-   "recommendation": "Maintain the cleaning pipeline for future dataset updates."
-  },
-  {
-   "title": "Class imbalance remains present in cleaned data",
-   "statement": "Circles represent 56.0% of the cleaned dataset, while triangles represent 13.0%, resulting in a largest to smallest ratio of 4.31.",
+   "title": "Significant class imbalance remains",
+   "statement": "The dataset exhibits a class imbalance with a ratio of 4.31 between the largest and smallest classes, where triangles represent only 13.0% of the 100 images analyzed.",
    "severity": "warning",
-   "recommendation": "Apply class weighting or data augmentation to balance class representation during training."
+   "recommendation": "Apply class weighting during training or perform data augmentation on the minority classes."
   },
   {
-   "title": "Raw dataset contained duplicates and cross-class files",
-   "statement": "The raw dataset contained 6 exact extra copies and 4 files duplicated across classes.",
-   "severity": "critical",
-   "recommendation": "Ensure strict deduplication checks are run prior to splitting data into train and test sets to prevent data leakage."
+   "title": "Data quality score improved after cleaning",
+   "statement": "The overall data quality score increased from 52.4 to 91.6 out of 100 following the removal of corrupt, duplicate, and low-quality images.",
+   "severity": "info",
+   "recommendation": "Continue monitoring the quality score if additional data is added to the training set."
   },
   {
-   "title": "Image quality issues affected raw data",
-   "statement": "The raw dataset contained 3 corrupt files, 5 blurry images, 3 too dark images, and 1 tiny image.",
+   "title": "Removal of corrupt and low-quality images",
+   "statement": "Cleaning processes removed 23 images from the original 123, including 3 corrupt files, 9 blurry images, and 1 image that was too small.",
    "severity": "warning",
-   "recommendation": "Filter out low-resolution and degraded images to improve feature extraction reliability."
+   "recommendation": "Ensure future data ingestion pipelines include validation checks for resolution and blurriness."
   },
   {
-   "title": "Suspected mislabeled images identified by AI review",
-   "statement": "An AI vision review observed 7 suspected mislabeled images in the dataset.",
+   "title": "Cross-class label contamination resolved",
+   "statement": "The raw dataset contained 4 files duplicated across different classes, which were successfully identified and removed during the cleaning process.",
    "severity": "info",
-   "recommendation": "Manually inspect the flagged files to verify and correct their class labels before proceeding with training."
+   "recommendation": "Maintain the current cleaning pipeline to prevent future label leakage."
   },
   {
-   "title": "Total image count reduced through cleaning",
-   "statement": "Cleaning operations removed 23 images in total, reducing the dataset from 123 to 100 images.",
+   "title": "AI-flagged potential mislabels",
+   "statement": "An AI vision review identified 5 suspected mislabels, specifically noting square-shaped images potentially incorrectly categorized within the circles folder, which require human verification.",
+   "severity": "warning",
+   "recommendation": "Manually audit the flagged images and reassign them to the correct class folder if necessary."
+  },
+  {
+   "title": "Inconsistent image modes and transparency",
+   "statement": "The dataset contains 2 images with transparency (RGBA) and 1 grayscale image (L), which may require consistent preprocessing to RGB before training.",
    "severity": "info",
-   "recommendation": "Verify that the reduced dataset size is still sufficient for the target model capacity."
+   "recommendation": "Convert all images to a uniform RGB format during the data loading pipeline."
+  },
+  {
+   "title": "Images require EXIF rotation",
+   "statement": "Two images were identified as requiring EXIF rotation to ensure correct orientation for the model.",
+   "severity": "warning",
+   "recommendation": "Apply EXIF orientation correction to these images before training."
   }
  ],
  "narrative": {
-  "headline": "Dataset quality score improved to 91.6 out of 100 after cleaning, but class imbalance remains.",
-  "executive_summary": "The shapes_dataset.zip dataset was cleaned for an image classifier project, reducing the total image count from 123 to 100 after removing 23 images. The data quality score increased from 52.4 out of 100 to 91.6 out of 100 through the removal of corrupt files, duplicates, blurry images, and tiny inputs. However, class imbalance persists in the cleaned data with circles representing 56.0% and triangles 13.0%, resulting in a largest to smallest ratio of 4.31. Additionally, an AI vision review flagged 7 suspected mislabeled images that require inspection.",
+  "headline": "Dataset quality improved to 91.6/100 after cleaning, but class imbalance and minor labeling issues remain.",
+  "executive_summary": "Data cleaning raised the quality score from 52.4 to 91.6 out of 100 by removing 23 images from the original 123. The final dataset of 100 images contains a class imbalance with a ratio of 4.31, where triangles account for only 13.0%. Additionally, an AI review flagged 5 potential mislabels in the circles folder, and preprocessing will need to handle 2 images with transparency and 1 grayscale image.",
   "next_steps": [
-   "Verify the 7 suspected mislabeled images flagged by the AI review",
-   "Address the class imbalance where circles represent 56.0% and triangles 13.0% of the dataset",
-   "Proceed with training the image classifier using the 100 cleaned images"
+   "Verify and correct the 5 AI-flagged suspected mislabels in the circles folder.",
+   "Address the class imbalance where triangles represent only 13.0% of the 100 images analyzed.",
+   "Standardize the 2 images with transparency (RGBA) and 1 grayscale image (L) to RGB format.",
+   "Apply EXIF rotation to the 2 images requiring correct orientation before training."
   ]
  },
  "notes": [],
@@ -74,77 +82,77 @@
    "op": "remove_corrupt",
    "description": "Remove files that can't be opened as images.",
    "changes": "Removed 3 images (circles/circle_006.jpg, circles/circle_007.jpg, squares/square_002.jpg).",
-   "rationale": "Removing files that cannot be opened is the necessary first step to ensure subsequent operations process valid data.",
+   "rationale": "Remove files that cannot be opened as images.",
+   "columns": []
+  },
+  {
+   "op": "fix_exif_orientation",
+   "description": "Rotate images upright using their EXIF orientation tag.",
+   "changes": "Marked 120 images: fix orientation.",
+   "rationale": "Rotate images upright using their EXIF orientation tag.",
+   "columns": []
+  },
+  {
+   "op": "convert_to_rgb",
+   "description": "Convert grayscale, palette, and transparent images to RGB (transparency on white).",
+   "changes": "Marked 120 images: to rgb.",
+   "rationale": "Convert grayscale, palette, and transparent images to RGB.",
    "columns": []
   },
   {
    "op": "drop_exact_duplicates",
    "description": "Keep one copy of byte-identical files.",
    "changes": "Removed 6 images (circles/circle_012_copy.jpg, circles/circle_013_copy.jpg, squares/square_006_copy.jpg, ...).",
-   "rationale": "Byte-identical files provide no additional information and inflate class counts.",
+   "rationale": "Keep one copy of byte-identical files.",
    "columns": []
   },
   {
    "op": "drop_near_duplicates",
    "description": "Keep one image per group of near-identical images (resized or re-encoded copies).",
    "changes": "Removed 4 images (circles/circle_014_resized.jpg, circles/circle_015_resized.jpg, squares/square_008_resized.jpg, ...).",
-   "rationale": "Near-duplicates like resized versions of the same image introduce redundancy.",
+   "rationale": "Keep one image per group of near-identical images.",
    "columns": []
   },
   {
    "op": "drop_cross_class_duplicates",
    "description": "Remove images whose duplicates appear under more than one class (ambiguous labels).",
    "changes": "Nothing needed changing: the data already met this rule.",
-   "rationale": "Cross-class duplicates indicate ambiguous labeling and should be removed to prevent training noise.",
+   "rationale": "Remove images whose duplicates appear under more than one class due to ambiguous labels.",
    "columns": []
   },
   {
    "op": "drop_too_small",
    "description": "Remove images whose shorter side is below min_side.",
    "changes": "Removed 1 image (circles/circle_008.jpg).",
-   "rationale": "Images under 32px lack sufficient detail for reliable classification.",
+   "rationale": "Remove images whose shorter side is below 32 pixels.",
    "columns": []
   },
   {
    "op": "drop_blurry",
    "description": "Remove images whose blur score (Laplacian variance) is below min_blur.",
    "changes": "Removed 9 images (circles/circle_000.jpg, circles/circle_001.jpg, circles/circle_002.jpg, ...).",
-   "rationale": "Images below the blur threshold are too degraded for accurate feature extraction.",
+   "rationale": "Remove images whose blur score is below the dataset threshold.",
    "columns": []
   },
   {
    "op": "drop_too_dark",
    "description": "Remove images with mean brightness at or below the value.",
    "changes": "Nothing needed changing: the data already met this rule.",
-   "rationale": "Images identified as too dark lack sufficient contrast for shape recognition.",
+   "rationale": "Remove images with mean brightness at or below 20.",
    "columns": []
   },
   {
    "op": "drop_too_bright",
    "description": "Remove images with mean brightness at or above the value.",
    "changes": "Nothing needed changing: the data already met this rule.",
-   "rationale": "Images identified as too bright are washed out and lack usable visual information.",
-   "columns": []
-  },
-  {
-   "op": "fix_exif_orientation",
-   "description": "Rotate images upright using their EXIF orientation tag.",
-   "changes": "Marked 100 images: fix orientation.",
-   "rationale": "Correcting orientation ensures images are presented in their intended upright state.",
-   "columns": []
-  },
-  {
-   "op": "convert_to_rgb",
-   "description": "Convert grayscale, palette, and transparent images to RGB (transparency on white).",
-   "changes": "Marked 100 images: to rgb.",
-   "rationale": "Standardizing color modes ensures consistency across the dataset for model input.",
+   "rationale": "Remove images with mean brightness at or above 240.",
    "columns": []
   },
   {
    "op": "flag_suspected_mislabels",
    "description": "Mark files for human review in the manifest (nothing is removed).",
    "changes": "Marked 5 images: suspected mislabel.",
-   "rationale": "Suspected mislabels identified by AI require human verification before any destructive action is taken.",
+   "rationale": "Mark vision-reviewed suspected mislabels for human review in the manifest.",
    "columns": []
   }
  ],
