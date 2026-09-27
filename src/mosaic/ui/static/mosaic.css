@@ -194,6 +194,20 @@ h1, h2, h3, .m-display { font-family: "Fraunces", Georgia, serif !important; let
 .stars .wrap:has(input:checked) label:has(~ label input:checked)::before { background: var(--m-highlight); }
 .stars input { position: absolute; opacity: 0; }
 
+/* ---- what the agents said to each other ---- */
+.gradio-container .convo { display: flex; flex-direction: column; gap: 10px; max-height: 640px; overflow-y: auto; padding: 2px; }
+.gradio-container .convo .msg {
+  border: 1px solid var(--m-border); border-left: 5px solid var(--who); border-radius: 10px;
+  background: var(--m-surface); padding: 10px 14px;
+}
+.gradio-container .convo .head { color: var(--m-text); font-size: 14px; display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: baseline; }
+.gradio-container .convo .head b { color: var(--who); font-family: "Fraunces", Georgia, serif; font-size: 16px; }
+.dark .gradio-container .convo .head b { filter: brightness(1.6); }
+.gradio-container .convo .role { color: var(--m-muted); font-size: 12.5px; }
+.gradio-container .convo .part { background: var(--m-border); color: var(--m-text); border-radius: 999px; padding: 1px 8px; font-size: 12px; }
+.gradio-container .convo .subj { margin-left: auto; color: var(--m-accent); font-size: 12.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .04em; }
+.gradio-container .convo .body { white-space: pre-wrap; color: var(--m-text); font-size: 13.5px; line-height: 1.55; margin-top: 6px; }
+
 /* charts follow night mode: Plotly writes colors inline, and these win over them */
 .dark .js-plotly-plot .main-svg text { fill: #F3E9DC !important; }
 .dark .js-plotly-plot .gridlayer path, .dark .js-plotly-plot .zerolinelayer path { stroke: rgba(243, 233, 220, .14) !important; }

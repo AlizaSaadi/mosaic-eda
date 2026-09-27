@@ -139,3 +139,20 @@ def test_the_app_builds_and_colors_can_switch_for_color_blind_viewers(monkeypatc
     assert app.recolor(fig)["data"][0]["marker"]["color"] == "#0072B2"
     demo = app.build_app()
     assert demo is not None
+
+
+def test_the_agents_conversation_shows_who_said_what():
+    from mosaic.ui.app import conversation_html, to_message
+
+    msg = RunEvent(
+        ts=0,
+        kind="message",
+        title="[table] Senior Reviewer to Insight Analyst: please revise",
+        detail="- Finding 1: <b>too strong</b>. Please: soften it.",
+        data={"sender": "Senior Reviewer", "recipient": "Insight Analyst"},
+    )
+    page = conversation_html([ev("step", "Profile ready"), msg])
+    assert page.count('class="msg"') == 1 and "Rex" in page and "Pip" in page
+    assert "please revise" in page and "table" in page
+    assert "&lt;b&gt;too strong&lt;/b&gt;" in page  # the data's text is shown, not rendered
+    assert "**Rex** (Senior Reviewer) to **Pip** (Insight Analyst)" in to_message(msg)["content"]

@@ -140,3 +140,22 @@ def test_failing_plans_fall_back_to_safe_only_plan(run_flow, monkeypatch):
     assert state.plan["summary"].startswith("Safe-only fallback plan")
     assert state.rows_after == state.rows_before  # nothing removed
     assert any("safe-only plan" in n for n in state.notes)
+
+
+def test_the_agents_messages_to_each_other_are_logged(run_flow):
+    _state, rt, _ = run_flow(MESSY)
+    messages = [e for e in rt.reporter.events() if e.kind == "message"]
+    route = [(m.data["sender"], m.data["recipient"]) for m in messages]
+    assert route == [
+        ("Dataset Triage Lead", "Cleaning Strategist"),
+        ("Cleaning Strategist", "Insight Analyst"),
+        ("Insight Analyst", "Senior Reviewer"),
+        ("Senior Reviewer", "Insight Analyst"),  # please revise
+        ("Insight Analyst", "Senior Reviewer"),  # the revised findings
+        ("Senior Reviewer", "Insight Analyst"),  # approved
+        ("Senior Reviewer", "Report Writer"),
+        ("Report Writer", "you"),
+    ]
+    revise = messages[3]
+    assert revise.title.endswith("please revise") and "Please:" in revise.detail
+    assert "Changed" in messages[1].detail or "Removed" in messages[1].detail

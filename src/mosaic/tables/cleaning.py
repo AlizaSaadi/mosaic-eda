@@ -49,6 +49,8 @@ def _show(value) -> str:
             return "(missing)"
     except (TypeError, ValueError):
         pass
+    if isinstance(value, pd.Timestamp):
+        return value.strftime("%Y-%m-%d" if value == value.normalize() else "%Y-%m-%d %H:%M")
     if isinstance(value, bool | np.bool_):
         return str(bool(value))
     if isinstance(value, int | float | np.integer | np.floating):
@@ -129,7 +131,9 @@ def describe_change(before: pd.DataFrame, after: pd.DataFrame, unit: str = "rows
             was_text = not pd.api.types.is_numeric_dtype(before[col]) and not (
                 pd.api.types.is_datetime64_any_dtype(before[col])
             )
-            if was_text and pd.api.types.is_numeric_dtype(after[col]):
+            if was_text and pd.api.types.is_bool_dtype(after[col]):
+                parts.append(f"converted '{col}' to true/false")
+            elif was_text and pd.api.types.is_numeric_dtype(after[col]):
                 parts.append(f"converted '{col}' to numbers")
             elif was_text and pd.api.types.is_datetime64_any_dtype(after[col]):
                 parts.append(f"converted '{col}' to dates")

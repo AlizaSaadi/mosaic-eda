@@ -25,7 +25,7 @@ from crewai.events.types.task_events import TaskCompletedEvent, TaskFailedEvent
 @dataclass
 class RunEvent:
     ts: float
-    kind: str  # step | agent | llm | guardrail | fallback | fix | info | error
+    kind: str  # step | agent | message | llm | guardrail | fallback | fix | review | info | error
     title: str
     detail: str = ""
     status: str = "info"  # running | done | rejected | fixed | warning | error | info

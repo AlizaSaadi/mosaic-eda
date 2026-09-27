@@ -148,6 +148,28 @@ class EDAFlow(Flow[EDAState]):
             raise box["error"]
         return box["result"]
 
+    # ---- messages between agents, for the detailed log ----
+
+    def _analyst(self) -> str:
+        if self.state.group:
+            return "Cross-Type Synthesizer"
+        return "Video Synthesizer" if self.state.modality == "video" else "Insight Analyst"
+
+    def _message(self, sender: str, recipient: str, subject: str, body: str) -> None:
+        """What one agent hands to the next, as the next one receives it."""
+        prefix = f"[{self._label}] " if self._label else ""
+        self._rt.reporter.emit(
+            "message", f"{prefix}{sender} to {recipient}: {subject}", body.strip(), "done",
+            sender=sender, recipient=recipient,
+        )  # fmt: skip
+
+    def _findings_text(self) -> str:
+        return "\n".join(
+            f"{i}. [{f['severity']}] {f['title']}: {f['statement']}"
+            + (f"\n   Recommendation: {f['recommendation']}" if f.get("recommendation") else "")
+            for i, f in enumerate(self.state.findings, 1)
+        )
+
     def _run_stage(self, name: str, inputs: dict[str, Any], *, fatal: bool = True):
         """Run a one-task crew. Non-fatal stages post a warning and let the Flow degrade."""
         try:
@@ -336,6 +358,12 @@ class EDAFlow(Flow[EDAState]):
         if brief.target_column and self._adapter.columns:
             self.state.target = brief.target_column
         self._step("Triage done", brief.dataset_description, "done")
+        self._message(
+            "Dataset Triage Lead", "Cleaning Strategist", "triage brief",
+            f"{brief.dataset_description}\n\nPlease focus on:\n"
+            + "\n".join(f"- {a}" for a in brief.focus_areas)
+            + (f"\n\nTarget column: {brief.target_column}" if brief.target_column else ""),
+        )  # fmt: skip
         self._timed("triage", t0)
 
     @listen(triage)
@@ -388,6 +416,15 @@ class EDAFlow(Flow[EDAState]):
         self.state.quality_clean, self.state.rows_after = quality, items
         self.state.outputs.update(outputs)
         self._record_cleaning_summary(run)
+        self._message(
+            "Cleaning Strategist", self._analyst(), "cleaning plan, applied",
+            f"{plan.summary}\n\n"
+            + "\n".join(f"{st.index}. {st.op}: {st.changes}\n   Why: {st.rationale}"
+                        for st in run.steps)
+            + f"\n\nResult: {self.state.unit} {self.state.rows_before:,} -> "
+            f"{self.state.rows_after:,}; quality {self.state.quality_raw} -> "
+            f"{self.state.quality_clean}.",
+        )  # fmt: skip
         self._rt.reporter.count("tool_runs", 3)
         self._step(
             "Cleaned and re-profiled",
@@ -481,6 +518,9 @@ class EDAFlow(Flow[EDAState]):
             return
         report = parse_output(result.tasks_output[0], FindingsReport)
         self.state.findings = [f.model_dump() for f in report.findings]
+        self._message(
+            self._analyst(), "Senior Reviewer", "findings for review", self._findings_text()
+        )
 
     # ---- review loop (self-correction level 4) ----
 
@@ -529,14 +569,40 @@ class EDAFlow(Flow[EDAState]):
         verdict = parse_output(result.tasks_output[0], ReviewVerdict)
         self.state.review = verdict.model_dump()
         self.state.review_history.append(self.state.review)
-        blocking = [i for i in verdict.issues if i.blocking]
         lines = [
             f"Finding {i.finding} ({i.kind}): {i.problem} Fix: {i.fix_request}"
             for i in verdict.issues
         ]
         lines += [f"Missed: {m}" for m in verdict.missed]
-        if verdict.approved and not blocking and not verdict.missed:
-            self._rt.reporter.emit("review", "Reviewer approved the findings", "", "done")
+        notes = "\n".join(
+            f"- Finding {i.finding}{'' if i.blocking else ' (optional)'}: {i.problem} "
+            f"Please: {i.fix_request}"
+            for i in verdict.issues
+        ) + "".join(f"\n- Not covered yet: {m}" for m in verdict.missed)
+        decision = self._review_decision()
+        if decision == "approved":
+            self._message(
+                "Senior Reviewer", self._analyst(), "approved",
+                "The findings are accurate and supported. Approved for the report."
+                + (f"\n\nNotes (not required now; gaps go into the report's notes):\n"
+                   f"{notes.strip()}" if notes.strip() else ""),
+            )  # fmt: skip
+        elif decision == "revise":
+            self._message(
+                "Senior Reviewer", self._analyst(), "please revise",
+                f"I can't approve these yet. Please change:\n{notes.strip()}",
+            )  # fmt: skip
+        else:
+            self._message(
+                "Senior Reviewer", self._analyst(), "out of revision rounds",
+                "These still aren't right, and we're out of revision rounds, so the findings "
+                f"I dispute will be withheld from the report:\n{notes.strip()}",
+            )  # fmt: skip
+        if decision == "approved":
+            title = "Reviewer approved the findings"
+            if verdict.issues or verdict.missed:
+                title += " (with notes)"
+            self._rt.reporter.emit("review", title, "\n".join(lines), "done")
         else:
             title = f"Reviewer requested {len(verdict.issues)} change(s)"
             if verdict.missed:
@@ -558,6 +624,10 @@ class EDAFlow(Flow[EDAState]):
             return "stop"
         if self.state.revise_failed:
             return "partial"
+        return self._review_decision()
+
+    def _review_decision(self) -> str:
+        """approved, revise, or partial, from the latest review (the gate and the log agree)."""
         verdict = self.state.review
         if verdict is None:
             return "approved"
@@ -591,9 +661,20 @@ class EDAFlow(Flow[EDAState]):
         if result is None:
             if self._ok():
                 self.state.revise_failed = True
+                self._message(
+                    self._analyst(), "Senior Reviewer", "couldn't revise",
+                    "I couldn't write a revision that passed the fact check, so the findings "
+                    "you disputed will be withheld; the rest go into the report.",
+                )  # fmt: skip
             return "revised"  # the review step skips itself and the gate publishes partially
         report = parse_output(result.tasks_output[0], FindingsReport)
         self.state.findings = [f.model_dump() for f in report.findings]
+        self._message(
+            self._analyst(), "Senior Reviewer",
+            f"revised findings (round {self.state.revision_round})",
+            "I made the changes you asked for. Here is the new version:\n"
+            + self._findings_text(),
+        )  # fmt: skip
         self._rt.reporter.count("self_corrections")
         self._step(
             "Revised findings passed the fact check", f"{len(report.findings)} findings", "done"
@@ -650,6 +731,11 @@ class EDAFlow(Flow[EDAState]):
         for p in self.state.parts:  # group mode: each type's own findings too
             shown_findings += [{**f, "type": p["modality"]} for f in p["finding_list"]]
         findings = json.dumps(shown_findings, indent=1)
+        self._message(
+            "Senior Reviewer", "Report Writer", "final findings to write up",
+            f"{len(self.state.findings)} checked findings are ready:\n" + self._findings_text()
+            + (f"\n\nAlso mention what isn't covered: {'; '.join(missed)}" if missed else ""),
+        )  # fmt: skip
         result = self._run_stage(
             "write_summary",
             {
@@ -666,6 +752,12 @@ class EDAFlow(Flow[EDAState]):
             self.state.narrative = parse_output(
                 result.tasks_output[0], ReportNarrative
             ).model_dump()
+            n = self.state.narrative
+            self._message(
+                "Report Writer", "you", "your summary",
+                f"{n['headline']}\n\n{n['executive_summary']}\n\nNext steps:\n"
+                + "\n".join(f"- {x}" for x in n["next_steps"]),
+            )  # fmt: skip
         elif not self._ok():
             return  # quota ran out
         else:

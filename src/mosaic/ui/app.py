@@ -22,7 +22,7 @@ from mosaic.llm.quota import QuotaTracker
 from mosaic.llm.routing import build_tracker
 from mosaic.reporting.share import fetch_shared_report, report_frame, sharing_configured
 from mosaic.ui import replay
-from mosaic.ui.art import drink, team_lineup, upload_icon
+from mosaic.ui.art import AGENT_TO_MEMBER, TEAM, drink, team_lineup, upload_icon
 from mosaic.ui.office import office_state, office_svg
 from mosaic.ui.palette import COLOR_BLIND_SAFE, HARVEST
 from mosaic.ui.reviews import review_record, save_review
@@ -48,6 +48,7 @@ LABELS = {
     "review": "Review",
     "error": "Error",
     "info": "Note",
+    "message": "Message",
 }
 
 _TRACKER: QuotaTracker | None = None
@@ -67,8 +68,51 @@ def runs_left_text(settings: Settings) -> str:
     return f"Live runs left today on the shared free quota: about **{left}**"
 
 
+def who(role: str) -> str:
+    """'Rex (Senior Reviewer)' for an agent role; other names as they are."""
+    name = AGENT_TO_MEMBER.get(role)
+    return f"**{name}** ({role})" if name else f"**{role}**"
+
+
+_COLORS = {m.name: m.body for m in TEAM}
+
+
+def conversation_html(events: list[RunEvent]) -> str:
+    """The messages the agents passed to each other, one card each, in order."""
+    cards = []
+    for e in events:
+        if e.kind != "message":
+            continue
+        sender, recipient = e.data.get("sender", ""), e.data.get("recipient", "")
+        name = AGENT_TO_MEMBER.get(sender, sender)
+        to = AGENT_TO_MEMBER.get(recipient, recipient)
+        part = e.title[1 : e.title.index("]")] if e.title[:1] == "[" else ""
+        subject = e.title.split(": ", 1)[-1]
+        cards.append(
+            f'<div class="msg" style="--who:{_COLORS.get(name, "#6B5646")}">'
+            f'<div class="head"><b>{html.escape(name)}</b> <span class="role">'
+            f"{html.escape(sender)}</span> to <b>{html.escape(to)}</b>"
+            + (f' <span class="part">{html.escape(part)}</span>' if part else "")
+            + f'<span class="subj">{html.escape(subject)}</span></div>'
+            f'<div class="body">{html.escape(e.detail)}</div></div>'
+        )
+    if not cards:
+        return '<div class="convo empty">No messages yet.</div>'
+    return f'<div class="convo">{"".join(cards)}</div>'
+
+
 def to_message(event: RunEvent) -> dict:
     label = LABELS.get(event.kind, "Note")
+    if event.kind == "message":  # one agent handing work to another, shown in full
+        sender, recipient = event.data.get("sender", ""), event.data.get("recipient", "")
+        subject = event.title.split(": ", 1)[-1]
+        part = event.title[1 : event.title.index("]")] + " · " if event.title[:1] == "[" else ""
+        body = html.escape(event.detail).replace("*", r"\*").replace("_", r"\_")
+        body = body.replace("\n", "  \n")  # keep the message's line breaks
+        return {
+            "role": "assistant",
+            "content": f"{who(sender)} to {who(recipient)} · *{part}{subject}*\n\n{body}",
+        }
     if event.kind in ("guardrail", "fallback", "error", "review") and event.detail:
         return {
             "role": "assistant",
@@ -266,6 +310,7 @@ def run_analysis(
         skip=False,
         figs=None,
         outputs=None,
+        events=None,
     ):
         return (
             feed if feed is not None else [],
@@ -283,6 +328,8 @@ def run_analysis(
             gr.update(visible=skip),
             figs if figs is not None else gr.update(),
             *download_updates(outputs),
+            feed if feed is not None else [],
+            conversation_html(events) if events is not None else gr.update(),
         )  # fmt: skip
 
     if not source:
@@ -377,6 +424,7 @@ def run_analysis(
         skip=finished,
         figs=figures,
         outputs=state.outputs,
+        events=runtime.reporter.events(),
     )
 
 
@@ -391,8 +439,9 @@ def replay_analysis(name: str, drink_kind: str = "tea", color_blind: bool = Fals
 
     def frame(screen, shown, *, results=None, tiles="", files=None, plots=None, figs=None):
         ready = replay_outputs(files or [])
+        log = [to_message(e) for e in shown]
         return (
-            [to_message(e) for e in shown],
+            log,
             f"Replay of a recorded run · {len(shown)} of {len(events)} steps",
             results if results is not None else gr.update(),
             tiles,
@@ -407,6 +456,8 @@ def replay_analysis(name: str, drink_kind: str = "tea", color_blind: bool = Fals
             gr.update(visible=figs is not None),
             figs if figs is not None else gr.update(),
             *download_updates(ready),
+            log,
+            conversation_html(shown),
         )
 
     start = time.time()
@@ -649,6 +700,10 @@ def build_app() -> gr.Blocks:
                 columns=2,
                 height="auto",
             )
+            with gr.Accordion("What the agents said to each other", open=False):
+                convo = gr.HTML("")
+            with gr.Accordion("Full log: every step, check, and message", open=False):
+                results_log = gr.Chatbot(label="Agent log", height=520)
             with gr.Accordion("All files (with the manifest and the run trace)", open=False):
                 downloads = gr.File(label="Files from this run", file_count="multiple")
             again_btn = gr.Button("Analyze another dataset")
@@ -679,7 +734,8 @@ def build_app() -> gr.Blocks:
         figures = gr.State([])
         outputs = [
             feed, counters, results, tiles, downloads, *plots, gallery, runs_left, choice_panel,
-            choice_text, *screens, office_box, skip_btn, figures, *download_btns,
+            choice_text, *screens, office_box, skip_btn, figures, *download_btns, results_log,
+            convo,
         ]  # fmt: skip
         ask = gr.State("ask")
         common = [upload, url, goal, user_key]
