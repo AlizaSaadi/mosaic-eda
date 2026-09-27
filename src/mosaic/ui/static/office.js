@@ -1,4 +1,5 @@
-// The Mosaic office and team: plays office actions from the server, and handles clicks.
+// The Mosaic office and team: plays office actions from the server, handles clicks, and
+// keeps the day/night and color-blind settings.
 // Gradio renders components after this script loads, so everything is found lazily.
 (function () {
   "use strict";
@@ -16,7 +17,68 @@
     return svg ? JSON.parse(svg.dataset.spots || "{}") : {};
   };
   const wait = (ms) => new Promise((r) => setTimeout(r, reduce ? Math.min(ms, 300) : ms));
+  const pick = (list) => list[Math.floor(Math.random() * list.length)];
 
+  // ---- day/night and color-blind mode (remembered in this browser) ----
+  function remember(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch (err) {
+      /* private mode: the setting just isn't remembered */
+    }
+  }
+  function recall(key) {
+    try {
+      return localStorage.getItem(key);
+    } catch (err) {
+      return null;
+    }
+  }
+  function applyTheme(dark) {
+    document.documentElement.classList.toggle("dark", dark);
+    document.body.classList.toggle("dark", dark);
+    $("#m-theme-btn")?.setAttribute("aria-pressed", String(dark));
+  }
+  function applyColorBlind(on) {
+    document.body.classList.toggle("cb-safe", on);
+    $("#m-cb-btn")?.setAttribute("aria-pressed", String(on));
+  }
+  // called by the hidden checkbox's change event, so the server recolors the charts too
+  window.mosaicColorBlind = function (on) {
+    applyColorBlind(on);
+    remember("mosaic-cb", on ? "1" : "0");
+  };
+  function colorBlindBox() {
+    return document.querySelector("#m-cb input[type=checkbox]");
+  }
+  document.addEventListener("click", (ev) => {
+    if (!ev.target.closest) return;
+    if (ev.target.closest("#m-theme-btn")) {
+      const dark = !document.body.classList.contains("dark");
+      applyTheme(dark);
+      remember("mosaic-theme", dark ? "dark" : "light");
+    } else if (ev.target.closest("#m-cb-btn")) {
+      const box = colorBlindBox();
+      if (box) box.click(); // Gradio sends the change to the server and back to mosaicColorBlind
+      else window.mosaicColorBlind(!document.body.classList.contains("cb-safe"));
+    }
+  });
+  let restoredCb = false;
+  function restoreSettings() {
+    const theme = recall("mosaic-theme");
+    applyTheme(theme ? theme === "dark" : document.body.classList.contains("dark"));
+    const box = colorBlindBox();
+    if (!restoredCb && box && recall("mosaic-cb") === "1") {
+      restoredCb = true;
+      if (!box.checked) box.click();
+    }
+    applyColorBlind(box ? box.checked : recall("mosaic-cb") === "1");
+  }
+  // Gradio sets its own theme class while it starts up: apply the saved one after it
+  document.addEventListener("DOMContentLoaded", restoreSettings);
+  [600, 1500, 3000].forEach((ms) => setTimeout(restoreSettings, ms));
+
+  // ---- the office ----
   function place(el, x, y) {
     el.setAttribute("transform", `translate(${x},${y})`);
     el.dataset.x = x;
@@ -52,15 +114,32 @@
     crt.classList.remove("walking");
   }
 
-  function say(name, text, ms = 1800) {
-    const el = member(name);
-    if (!el) return;
-    const bubble = el.querySelector(".bubble");
-    bubble.querySelector(".say").textContent = text;
+  function behindDesks(el) {
+    const svg = $("#office-svg");
+    const desk = svg && svg.querySelector(".desk");
+    if (desk) svg.insertBefore(el, desk);
+  }
+
+  // a speech bubble that grows to fit what's said
+  function speak(el, text, ms = 1800) {
+    const bubble = el && el.querySelector(".bubble");
+    if (!bubble) return;
+    const label = bubble.querySelector(".say");
+    label.textContent = text;
+    const rect = bubble.querySelector("rect");
+    let width = text.length * 6.2 + 20;
+    try {
+      width = Math.max(label.getComputedTextLength() + 22, 60);
+    } catch (err) {
+      /* not rendered yet: keep the estimate */
+    }
+    rect.setAttribute("width", width);
+    rect.setAttribute("x", -width / 2);
     bubble.classList.add("show");
     clearTimeout(bubble._t);
     bubble._t = setTimeout(() => bubble.classList.remove("show"), ms);
   }
+  const say = (name, text, ms) => speak(member(name), text, ms);
 
   function caption(text) {
     const c = $("#office-caption");
@@ -84,14 +163,74 @@
     if (opts.red) crt.classList.add("marked");
     const home = s[from];
     const there = s[to];
-    await walk(el, [home.door, there.door, there.guest]);
+    await walk(el, [home.door, there.door, there[opts.slot || "guest"]]);
     say(from, text);
     if (opts.onArrive) opts.onArrive();
-    await wait(1500);
+    await wait(opts.stay || 1500);
     crt.classList.remove("carrying", "marked");
+    if (opts.stayThere) return;
     await walk(el, [there.door, home.door, home.seat]);
-    const svg = $("#office-svg");
-    svg.insertBefore(el, svg.querySelector(".desk")); // back behind the desks
+    behindDesks(el);
+  }
+
+  async function hop(names, gap = 140) {
+    for (const name of names) {
+      const crt = member(name)?.querySelector(".crt");
+      if (!crt) continue;
+      crt.classList.add("hop");
+      setTimeout(() => crt.classList.remove("hop"), 450);
+      await wait(gap);
+    }
+  }
+
+  // the last scene: everyone brings their part to Quill, who delivers the report
+  async function finale(a) {
+    setWorking(null);
+    caption("Pip brings the final findings to Rex");
+    await visit("Pip", "Rex", "Final findings!", { stay: 1100 });
+    caption("Rex signs off");
+    say("Rex", "Checked. Approved!", 1600);
+    await hop(["Rex"]);
+    await wait(1300);
+    caption("Rex takes the approved findings to Quill");
+    await visit("Rex", "Quill", "All yours, Quill!", { stay: 1100 });
+    caption("Tilly and Mop add their notes");
+    await Promise.all([
+      visit("Tilly", "Quill", "Data notes!", { stay: 1200 }),
+      visit("Mop", "Quill", "Cleaning log!", { slot: "guest2", stay: 1200 }),
+    ]);
+    caption("Quill puts the report together");
+    setWorking("Quill");
+    say("Quill", "Writing...", 1600);
+    await wait(1900);
+    setWorking(null);
+    say("Quill", "Done!", 1000);
+    await wait(700);
+    caption("Quill brings you the report");
+    await visit("Quill", "lounge", a.say || "Your report!", {
+      stay: 900,
+      stayThere: true,
+      onArrive: () => document.querySelector("#office-svg .visitor-report")?.classList.add("show"),
+    });
+    caption("Your report is ready");
+    const s = spots();
+    const names = ["Tilly", "Mop", "Pip", "Rex", "Quill"];
+    await Promise.all(
+      names.map((name, i) => {
+        const el = member(name);
+        const home = s[name];
+        const lounge = s.lounge;
+        if (!el || !home || !lounge || !s.gather) return null;
+        const path = name === "Quill" ? [s.gather[i]] : [home.door, lounge.door, s.gather[i]];
+        return wait(i * 180).then(() => walk(el, path));
+      })
+    );
+    say("Pip", "Ta-da!", 2200);
+    await hop(names, 120);
+    await hop(names, 120);
+    await wait(1400);
+    // then on to the results (the skip button does the same thing sooner)
+    if ($("#office-svg")) document.querySelector("#to-results")?.click();
   }
 
   const handlers = {
@@ -136,15 +275,9 @@
       }
       await wait(600);
     },
+    finale,
     async done(a) {
-      setWorking(null);
-      caption("Your report is ready");
-      say(a.who, a.say, 2500);
-      for (const m of document.querySelectorAll("#office-svg .member .crt")) {
-        m.classList.add("hop");
-        setTimeout(() => m.classList.remove("hop"), 450);
-        await wait(140);
-      }
+      await finale(a); // older recordings
     },
     async fail(a) {
       setWorking(null);
@@ -161,8 +294,11 @@
       const p = s[el.dataset.name];
       if (p) place(el, ...p.seat);
       el.querySelector(".crt").className.baseVal = "crt";
+      behindDesks(el);
     });
-    document.querySelectorAll("#office-svg .visitor-drink").forEach((d) => d.classList.remove("show"));
+    document
+      .querySelectorAll("#office-svg .visitor-drink, #office-svg .visitor-report")
+      .forEach((d) => d.classList.remove("show"));
     caption("The team is getting ready");
     queue = [];
     seen = -1;
@@ -197,6 +333,7 @@
       reset();
     }
     // a long run can outpace the animations: skip ahead, but keep the latest few
+    // (and always the ending)
     const fresh = state.actions.filter((a) => a.id > seen);
     if (fresh.length) {
       seen = fresh[fresh.length - 1].id;
@@ -207,7 +344,14 @@
   }
   setInterval(poll, 400);
 
-  // clicking a creature: a hop, or a small meltdown after five quick clicks
+  // ---- clicking a creature: a hop, or a small meltdown after five quick clicks ----
+  const LINES = {
+    Tilly: ["I'm doing my best!", "Still sorting your files", "Triage takes a steady hand", "One file at a time, please"],
+    Mop: ["Yes boss, I'm on it!", "Scrubbing as fast as I can", "Clean data takes elbow grease", "Mind the wet floor!"],
+    Pip: ["Good reports take time", "I'm onto something here", "Numbers don't rush, and neither do I", "Shh, I'm counting"],
+    Rex: ["Rushing leads to mistakes", "I will check this twice", "Please take a number", "Patience is a virtue"],
+    Quill: ["Genius can't be hurried", "Writer's block incoming...", "Every word matters", "Chapter one is almost done"],
+  };
   const clicks = new Map();
   document.addEventListener("click", (ev) => {
     const crt = ev.target.closest && ev.target.closest(".crt");
@@ -218,14 +362,8 @@
     if (crt.classList.contains("stressed")) return;
     if (recent.length >= 5) {
       crt.classList.add("stressed");
-      const bubble = crt.closest(".member")?.querySelector(".bubble");
-      if (bubble) {
-        const lines = ["Too many clicks!", "I'm working!", "Please stop", "Deep breaths..."];
-        bubble.querySelector(".say").textContent = lines[Math.floor(Math.random() * lines.length)];
-        bubble.classList.add("show");
-        clearTimeout(bubble._t);
-        bubble._t = setTimeout(() => bubble.classList.remove("show"), 2200);
-      }
+      const name = crt.dataset.name;
+      speak(crt.closest(".member"), pick(LINES[name] || ["Too many clicks!"]), 2400);
       setTimeout(() => {
         crt.classList.remove("stressed");
         clicks.set(crt, []);

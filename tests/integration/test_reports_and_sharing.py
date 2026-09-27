@@ -11,6 +11,7 @@ from mosaic.events.reporter import ACTIVE, ensure_listener
 from mosaic.flow.eda_flow import EDAFlow
 from mosaic.flow.runtime import JobRuntime
 from mosaic.llm.routing import build_tracker
+from mosaic.reporting import charts
 from mosaic.reporting.share import ShareUnavailable, share_report
 from mosaic.reporting.static_charts import render_png
 from mosaic.workspace import create_workspace
@@ -66,10 +67,13 @@ def test_charts_are_redrawn_as_pngs(tmp_path):
     assert isinstance(hist["data"][0]["x"], dict)  # Plotly's compact typed array
     grouped = fig_json(go.Figure([go.Bar(name="before", x=["t"], y=[1]), go.Bar(x=["t"], y=[2])]))
     scatter = fig_json(go.Figure(go.Scatter(x=[1, 2], y=[1, 2])))
-    for i, fig in enumerate((bars, hist, grouped)):
+    styled = charts.histogram([1, 2, 2, 3, 9], title="t", x="value", noun="rows")
+    heat = charts.heatmap(np.eye(3), ["a", "b", "c"], title="corr")
+    for i, fig in enumerate((bars, hist, grouped, scatter, styled, heat)):
         assert render_png(fig, tmp_path / f"{i}.png")
         assert (tmp_path / f"{i}.png").read_bytes()[:4] == b"\x89PNG"
-    assert not render_png(scatter, tmp_path / "s.png")  # not drawn rather than drawn wrong
+    pie = fig_json(go.Figure(go.Pie(values=[1, 2])))
+    assert not render_png(pie, tmp_path / "p.png")  # not drawn rather than drawn wrong
 
 
 def test_every_report_also_comes_as_a_pdf(tmp_path):

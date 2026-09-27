@@ -15,14 +15,13 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 from PIL import Image, ImageDraw
 
 from mosaic.audio.transcribe import TranscriptionResult
 from mosaic.evidence.store import EvidenceStore
+from mosaic.reporting import charts
 from mosaic.tables.profile import r4
 from mosaic.text.profile import snippet
-from mosaic.ui.palette import HARVEST
 from mosaic.video.pipeline_helpers import near_groups
 
 TOO_SHORT_S = 1.0
@@ -76,24 +75,8 @@ def scene_spans(row: dict) -> list[tuple[float, float]]:
     return [(round(a, 2), round(b, 2)) for a, b in pairwise(edges) if b > a]
 
 
-def _fig(fig: go.Figure, title: str) -> dict:
-    fig.update_layout(
-        title=title,
-        template="plotly_white",
-        colorway=HARVEST["chart"],
-        height=340,
-        font={"family": "Inter, system-ui, sans-serif", "color": HARVEST["text"]},
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin={"l": 50, "r": 20, "t": 50, "b": 50},
-    )
-    return json.loads(fig.to_json())
-
-
-def _chart(store: EvidenceStore, name: str, title: str, fig: go.Figure, stage: str) -> str:
-    return store.add(
-        "chart", "chart", name, f"Chart: {title} ({stage})", {"figure": _fig(fig, title)}
-    ).id
+def _chart(store: EvidenceStore, name: str, title: str, figure: dict, stage: str) -> str:
+    return store.add("chart", "chart", name, f"Chart: {title} ({stage})", {"figure": figure}).id
 
 
 def keyframe_sheets(df: pd.DataFrame, out: Path) -> list[dict]:
@@ -292,9 +275,7 @@ def profile_video(
             {"stage": stage},
         )
         result.artifact_ids.append(a.id)
-        fig = go.Figure(
-            go.Bar(x=list(labelled), y=list(labelled.values()), marker_color=HARVEST["accent"])
-        )
+        fig = charts.class_balance(labelled, noun="videos")
         result.chart_ids.append(_chart(store, "class_balance", "Videos per class", fig, stage))
 
     if stage == "raw":
@@ -356,18 +337,16 @@ def profile_video(
 
     values = ok["duration_s"].dropna()
     if len(values):
-        hist, edges = np.histogram(values, bins=min(20, max(5, len(values) // 2)))
-        fig = go.Figure(
-            go.Bar(
-                x=(edges[:-1] + edges[1:]) / 2,
-                y=hist,
-                width=np.diff(edges),
-                marker_color=HARVEST["chart"][1],
-            )
+        fig = charts.histogram(values.tolist(), title="Video length", x="Length (seconds)",
+                               noun="videos")  # fmt: skip
+        result.chart_ids.append(_chart(store, "duration_hist", "Video length", fig, stage))
+        motion = ok["motion"].dropna().tolist()
+        fig = charts.histogram(
+            motion,
+            title="Motion",
+            x="Average change between frames (0 = static, 255 = maximum)",
+            noun="videos",
+            color=2,
         )
-        result.chart_ids.append(
-            _chart(store, "duration_hist", "Video length (seconds)", fig, stage)
-        )
-        fig = go.Figure(go.Bar(x=ok["path"], y=ok["motion"], marker_color=HARVEST["chart"][2]))
-        result.chart_ids.append(_chart(store, "motion", "Motion per video (0-255)", fig, stage))
+        result.chart_ids.append(_chart(store, "motion", "Motion per video", fig, stage))
     return result

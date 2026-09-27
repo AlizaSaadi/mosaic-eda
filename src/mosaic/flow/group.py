@@ -5,6 +5,7 @@ parent Flow's Cross-Type Synthesizer writes findings about the links."""
 
 from __future__ import annotations
 
+import copy
 import math
 import shutil
 import time
@@ -12,17 +13,16 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-import plotly.graph_objects as go
-
 from mosaic.flow.runtime import JobRuntime
 from mosaic.ingest.manifest import subset_manifest
 from mosaic.ingest.models import FileManifest, Modality
 from mosaic.mixed.links import link_table, record_links, record_overview
-from mosaic.ui.palette import HARVEST
+from mosaic.reporting import charts
 from mosaic.workspace import create_workspace
 
 GROUP_ORDER = (Modality.TABLE, Modality.TEXT, Modality.IMAGE, Modality.AUDIO, Modality.VIDEO)
 PARALLEL = 2  # parts analyzed at once; more would mostly queue on the shared rate limits
+CHARTS_PER_PART = 2  # each type's first charts, shown with the group's own
 SYNTHESIS_BUDGET_S = 240  # linking, cross-type findings, review, and the summary
 
 
@@ -79,7 +79,23 @@ def summarize_part(flow: Any) -> dict[str, Any]:
         ],
         "headline": narrative.get("headline", ""),
         "out": str(flow._rt.ws.out),
+        "charts": part_charts(flow),
     }
+
+
+def part_charts(flow: Any, n: int = CHARTS_PER_PART) -> list[dict]:
+    """A part's first few charts, with the data type added to each title."""
+    adapter = flow._adapter
+    if adapter is None or flow.state.status != "done":
+        return []
+    out = []
+    for chart_id in adapter.chart_ids[:n]:
+        figure = copy.deepcopy(flow._rt.store.get(chart_id).data["figure"])
+        title = figure.get("layout", {}).get("title")
+        if isinstance(title, dict) and title.get("text"):
+            title["text"] = f"{flow._label.capitalize()}: {title['text']}"
+        out.append(figure)
+    return out
 
 
 def link_parts(store, manifest: FileManifest, flows: list[Any]) -> list[str]:
@@ -100,34 +116,45 @@ def link_parts(store, manifest: FileManifest, flows: list[Any]) -> list[str]:
     return ids
 
 
+def part_chart_ids(store, parts: list[dict[str, Any]]) -> list[str]:
+    """Save each part's charts in the group's store, so the app and report can show them."""
+    ids = []
+    for p in parts:
+        for i, figure in enumerate(p.pop("charts", [])):  # stored here, not kept in state
+            ids.append(
+                store.add(
+                    "chart",
+                    "chart",
+                    f"{p['modality']}_chart_{i + 1}",
+                    f"Chart from the {p['modality']} analysis",
+                    {"figure": figure},
+                ).id
+            )
+    return ids
+
+
 def group_chart(store, parts: list[dict[str, Any]]) -> str:
     done = [p for p in parts if p["status"] == "done"]
     names = [p["modality"] for p in done]
-    fig = go.Figure(
-        [
-            go.Bar(name="Before cleaning", x=names, y=[p["quality_before"] for p in done]),
-            go.Bar(name="After cleaning", x=names, y=[p["quality_after"] for p in done]),
-        ]
+    before = [p["quality_before"] for p in done]
+    after = [p["quality_after"] for p in done]
+    gain = [round(b - a, 1) for a, b in zip(before, after, strict=True)]
+    best = names[gain.index(max(gain))] if gain else ""
+    figure = charts.grouped_bars(
+        [n.capitalize() for n in names],
+        {"Before cleaning": before, "After cleaning": after},
+        title="Data quality by type",
+        x="Data type",
+        y="Quality score (out of 100)",
+        y_range=(0, 108),
+        subtitle=f"Cleaning helped {best} the most (+{max(gain):g} points)" if best else "",
     )
-    fig.update_layout(
-        title="Data quality by type (out of 100)",
-        barmode="group",
-        template="plotly_white",
-        colorway=HARVEST["chart"],
-        height=340,
-        font={"family": "Inter, system-ui, sans-serif", "color": HARVEST["text"]},
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin={"l": 50, "r": 20, "t": 50, "b": 50},
-    )
-    import json
-
     return store.add(
         "chart",
         "chart",
         "group_quality",
         "Chart: data quality by type",
-        {"figure": json.loads(fig.to_json())},
+        {"figure": figure},
     ).id
 
 

@@ -6,15 +6,14 @@ and cite the artifact IDs.
 
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 
 from mosaic.evidence.store import EvidenceStore
+from mosaic.reporting import charts
 from mosaic.tables.load import LoadedTable
 from mosaic.tables.semantics import (
     ColumnType,
@@ -24,7 +23,6 @@ from mosaic.tables.semantics import (
     parse_dates,
     parse_numbers,
 )
-from mosaic.ui.palette import HARVEST
 
 NUMERIC_KINDS = ("numeric", "currency", "percent")
 MAX_HIST = 6
@@ -168,76 +166,76 @@ def _quality(overview: dict, columns: dict) -> dict:
     return {"score": round(score, 1), "parts": {k: round(v, 1) for k, v in parts.items()}}
 
 
-def _fig(fig: go.Figure, title: str) -> dict:
-    fig.update_layout(
-        title=title,
-        template="plotly_white",
-        colorway=HARVEST["chart"],
-        font={"family": "Inter, system-ui, sans-serif", "color": HARVEST["text"]},
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin={"l": 50, "r": 20, "t": 50, "b": 50},
-        height=340,
-    )
-    return json.loads(fig.to_json())
+def _chart(store, name: str, label: str, figure: dict, **extra) -> str:
+    return store.add("chart", "chart", name, label, {"figure": figure, **extra}).id
 
 
 def _charts(df: pd.DataFrame, types: dict[str, ColumnType], columns: dict, store, stage):
     ids = []
     missing = {c: s["missing_pct"] for c, s in columns.items() if s["missing_pct"]}
     if missing:
-        order = sorted(missing, key=missing.get, reverse=True)[:20]
-        fig = go.Figure(
-            go.Bar(x=order, y=[missing[c] for c in order], marker_color=HARVEST["accent"])
+        figure = charts.ranked_bars(
+            list(missing),
+            list(missing.values()),
+            title="Missing values by column",
+            x="Share of rows missing (%)",
+            y="Column",
+            percent=True,
+            color=0,
+            subtitle=f"{len(missing)} of {len(columns)} columns have gaps",
         )
-        fig.update_yaxes(title="% missing")
-        ids.append(
-            store.add(
-                "chart",
-                "chart",
-                "missing_bar",
-                f"Chart: missing values by column ({stage})",
-                {"figure": _fig(fig, "Missing values by column")},
-            ).id
+        ids.append(_chart(store, "missing_bar", f"Chart: missing values by column ({stage})",
+                          figure))  # fmt: skip
+    numeric = [c for c, t in types.items() if t.kind in NUMERIC_KINDS]
+    if len(numeric) >= 3:
+        frame = pd.DataFrame({c: typed_series(df[c], types[c]) for c in numeric[:12]})
+        corr = frame.corr(method="pearson").fillna(0)
+        upper = corr.where(~np.eye(len(corr), dtype=bool)).abs().stack()
+        strongest = upper.idxmax() if len(upper) else None
+        note = (
+            f"strongest pair: {strongest[0]} and {strongest[1]} (r = {corr.loc[strongest]:.2f})"
+            if strongest
+            else ""
         )
-    numeric = [c for c, t in types.items() if t.kind in NUMERIC_KINDS][:MAX_HIST]
-    for col in numeric:
+        figure = charts.heatmap(
+            corr.to_numpy(),
+            list(corr.columns),
+            title="How the numeric columns move together",
+            subtitle=f"Pearson correlation, -1 to 1 · {note}",
+        )
+        ids.append(_chart(store, "correlation", f"Chart: correlations ({stage})", figure))
+    for i, col in enumerate(numeric[:MAX_HIST]):
         values = typed_series(df[col], types[col]).dropna()
         if len(values) < 2:
             continue
-        counts, edges = np.histogram(values, bins=min(30, max(5, int(np.sqrt(len(values))))))
-        centers = (edges[:-1] + edges[1:]) / 2
-        fig = go.Figure(
-            go.Bar(x=centers, y=counts, width=np.diff(edges), marker_color=HARVEST["chart"][1])
+        figure = charts.histogram(
+            values.astype(float).tolist(),
+            title=f"Distribution of {col}",
+            x=col,
+            noun="rows",
+            color=1 + i % 3,
         )
-        fig.update_xaxes(title=col)
-        fig.update_yaxes(title="count")
-        ids.append(
-            store.add(
-                "chart",
-                "chart",
-                "histogram",
-                f"Chart: distribution of {col} ({stage})",
-                {"figure": _fig(fig, f"Distribution of {col}"), "column": col},
-            ).id
-        )
+        ids.append(_chart(store, "histogram", f"Chart: distribution of {col} ({stage})", figure,
+                          column=col))  # fmt: skip
     cats = [c for c, t in types.items() if t.kind in ("category", "boolean")][:MAX_BARS]
     for col in cats:
         top = columns[col].get("top_values") or []
         if not top:
             continue
-        fig = go.Figure(
-            go.Bar(x=[v for v, _ in top], y=[n for _, n in top], marker_color=HARVEST["chart"][2])
+        filled = int(df[col].notna().sum())
+        figure = charts.ranked_bars(
+            [v for v, _ in top],
+            [n for _, n in top],
+            title=f"Most common values: {col}",
+            x="Number of rows",
+            y=col,
+            total=filled,
+            color=2,
+            subtitle=f"{columns[col].get('unique', len(top))} distinct values in "
+            f"{filled:,} filled rows",
         )
-        ids.append(
-            store.add(
-                "chart",
-                "chart",
-                "top_values",
-                f"Chart: most common values of {col} ({stage})",
-                {"figure": _fig(fig, f"Most common values: {col}"), "column": col},
-            ).id
-        )
+        ids.append(_chart(store, "top_values", f"Chart: most common values of {col} ({stage})",
+                          figure, column=col))  # fmt: skip
     return ids
 
 

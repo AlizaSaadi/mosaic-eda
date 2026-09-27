@@ -52,8 +52,12 @@ def spots() -> dict[str, dict[str, list[float]]]:
         out[name] = {
             "seat": [x + 190, y + 94],
             "guest": [x + 78, y + 104],
+            "guest2": [x + 34, y + 112],  # a second visitor at the same time
             "door": [x + 145, CORRIDOR_Y - 38],
         }
+    # where everyone gathers in the lounge at the end
+    x, y = room_origin(*LOUNGE)
+    out["gather"] = [[x + 40 + 52 * i, y + 120 + (i % 2) * 6] for i in range(len(ROOMS))]
     return out
 
 
@@ -149,6 +153,13 @@ def _lounge() -> str:
         f"{drink(k)}</g>"
         for k in ("tea", "coffee")
     )
+    report = (
+        f'<g class="visitor-report" transform="translate({x + 78},{y + 78}) rotate(-8)">'
+        '<rect x="-15" y="-19" width="30" height="38" rx="2" fill="#FFFDF8" stroke="#6B5646" '
+        'stroke-width="1.5"/><rect x="-15" y="-19" width="30" height="8" rx="2" fill="#B5471B"/>'
+        '<path d="M-9,-3 H9 M-9,3 H9 M-9,9 H4" stroke="#6B5646" stroke-width="1.5"/>'
+        '<rect x="3" y="-1" width="3" height="10" fill="#2F6F73"/></g>'
+    )
     return (
         f'<rect x="{x}" y="{y}" width="{ROOM_W}" height="{ROOM_H}" rx="10" fill="#FBF6EE" '
         f'stroke="#D9C6A8" stroke-width="3"/>'
@@ -166,7 +177,9 @@ def _lounge() -> str:
         f'<rect x="{x + 184}" y="{y + 134}" width="6" height="18" fill="#8A6440"/>'
         f'<rect x="{x + 226}" y="{y + 134}" width="6" height="18" fill="#8A6440"/>'
         f'<circle cx="{x + 262}" cy="{y + 118}" r="14" fill="#5E7F33"/>'
-        f'<rect x="{x + 254}" y="{y + 128}" width="16" height="18" rx="3" fill="#B5471B"/>' + drinks
+        f'<rect x="{x + 254}" y="{y + 128}" width="16" height="18" rx="3" fill="#B5471B"/>'
+        + drinks
+        + report
     )
 
 
@@ -232,7 +245,7 @@ def office_actions(events: list[RunEvent], drink_kind: str = "none") -> list[dic
         elif e.kind == "fallback":
             actions.append({"type": "say", "who": current or "Tilly", "say": "Line's busy..."})
         elif e.kind == "step" and e.title == "Report ready":
-            actions.append({"type": "done", "who": "Quill", "say": "Report ready!"})
+            actions.append({"type": "finale", "who": "Quill", "say": "Your report!"})
         elif e.kind == "error":
             actions.append({"type": "fail", "who": "Rex", "say": "Something went wrong"})
     for i, a in enumerate(actions):

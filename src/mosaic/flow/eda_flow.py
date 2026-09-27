@@ -24,7 +24,7 @@ from pydantic import Field, PrivateAttr
 
 from mosaic.crews.mixed.crew import MixedCrew
 from mosaic.flow.adapters import Adapter, make_adapter
-from mosaic.flow.group import bundle, group_chart, record_group, run_parts
+from mosaic.flow.group import bundle, group_chart, part_chart_ids, record_group, run_parts
 from mosaic.flow.runtime import JobRuntime
 from mosaic.guardrails.task_guardrails import GuardContext, parse_output
 from mosaic.ingest.models import ANALYZABLE, FileManifest, IngestError, count_label
@@ -260,7 +260,10 @@ class EDAFlow(Flow[EDAState]):
         self.state.quality_clean = round(sum(p["quality_after"] for p in done) / len(done), 1)
         self.state.rows_before = sum(p["items_before"] for p in done)
         self.state.rows_after = sum(p["items_after"] for p in done)
-        self._group_charts = [group_chart(self._rt.store, parts)]
+        self._group_charts = [
+            group_chart(self._rt.store, parts),
+            *part_chart_ids(self._rt.store, parts),
+        ]
         links = [a for a in self._rt.store.all("profile") if a.id.startswith("mix_links")]
         self._step(
             "Linked the data types",

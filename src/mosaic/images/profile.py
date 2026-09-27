@@ -2,20 +2,18 @@
 
 from __future__ import annotations
 
-import json
+import math
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 from PIL import Image, ImageDraw, ImageOps
 
 from mosaic.evidence.store import EvidenceStore
 from mosaic.images.pipeline_helpers import cross_class_mask, near_groups
+from mosaic.reporting import charts
 from mosaic.tables.profile import r4
-from mosaic.ui.palette import HARVEST
 
 DARK = 25.0
 BRIGHT = 235.0
@@ -62,20 +60,6 @@ def categorize(df: pd.DataFrame) -> tuple[dict[str, list[str]], float]:
         cats[name] = files
         taken.update(files)
     return cats, blur_threshold
-
-
-def _fig(fig: go.Figure, title: str) -> dict:
-    fig.update_layout(
-        title=title,
-        template="plotly_white",
-        colorway=HARVEST["chart"],
-        height=340,
-        font={"family": "Inter, system-ui, sans-serif", "color": HARVEST["text"]},
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin={"l": 50, "r": 20, "t": 50, "b": 50},
-    )
-    return json.loads(fig.to_json())
 
 
 def contact_sheets(df: pd.DataFrame, root: Path, out: Path, per_class_sheets: int = 2):
@@ -229,16 +213,14 @@ def profile_images(
             {"stage": stage},
         )
         result.artifact_ids.append(a.id)
-        fig = go.Figure(
-            go.Bar(x=list(labelled), y=list(labelled.values()), marker_color=HARVEST["accent"])
-        )
+        figure = charts.class_balance(labelled, noun="images")
         result.chart_ids.append(
             store.add(
                 "chart",
                 "chart",
                 "class_balance",
                 f"Chart: images per class ({stage})",
-                {"figure": _fig(fig, "Images per class")},
+                {"figure": figure},
             ).id
         )
 
@@ -265,46 +247,46 @@ def profile_images(
     )
     result.artifact_ids.append(a.id)
 
-    for column, title, color in (("brightness", "Brightness", 1), ("blur", "Blur score (log)", 2)):
-        values = ok[column].dropna()
-        if column == "blur":
-            values = np.log10(values.clip(lower=1))
-        counts_, edges = np.histogram(values, bins=20)
-        fig = go.Figure(
-            go.Bar(
-                x=(edges[:-1] + edges[1:]) / 2,
-                y=counts_,
-                width=np.diff(edges),
-                marker_color=HARVEST["chart"][color],
-            )
-        )
+    sharp = [math.log10(max(v, 1)) for v in ok["blur"].dropna()]
+    cutoff = [(math.log10(max(result.blur_threshold, 1)), "blur cutoff")]
+    for column, title, x, values, color, markers, note in (
+        ("brightness", "Brightness", "Mean brightness (0 = black, 255 = white)",
+         ok["brightness"].dropna().tolist(), 1, (), ""),
+        ("blur", "Sharpness", "Sharpness (log10 of Laplacian variance; higher is sharper)",
+         sharp, 2, cutoff if result.blur_threshold else (), "left of the red line is blurry"),
+    ):  # fmt: skip
+        if not values:
+            continue
+        figure = charts.histogram(values, title=title, x=x, noun="images", color=color,
+                                  markers=markers, log_note=note)  # fmt: skip
         result.chart_ids.append(
             store.add(
                 "chart",
                 "chart",
                 f"{column}_hist",
                 f"Chart: {title} ({stage})",
-                {"figure": _fig(fig, title)},
+                {"figure": figure},
             ).id
         )
-    fig = go.Figure(
-        go.Scatter(
-            x=ok["width"],
-            y=ok["height"],
-            mode="markers",
-            marker={"color": HARVEST["chart"][3], "size": 7, "opacity": 0.7},
-            text=ok["path"],
-        )
+    shapes = Counter(zip(ok["width"], ok["height"], strict=False))
+    common = shapes.most_common(1)[0] if shapes else None
+    figure = charts.scatter(
+        ok["width"].tolist(),
+        ok["height"].tolist(),
+        names=ok["path"].tolist(),
+        title="Image sizes",
+        x="Width (pixels)",
+        y="Height (pixels)",
+        subtitle=f"{len(shapes)} distinct sizes"
+        + (f" · most common {common[0][0]}x{common[0][1]} ({common[1]} images)" if common else ""),
     )
-    fig.update_xaxes(title="width (px)")
-    fig.update_yaxes(title="height (px)")
     result.chart_ids.append(
         store.add(
             "chart",
             "chart",
             "sizes",
             f"Chart: image sizes ({stage})",
-            {"figure": _fig(fig, "Image sizes")},
+            {"figure": figure},
         ).id
     )
 

@@ -42,7 +42,7 @@ def test_run_events_become_office_scenes():
     ]
     assert ("reject", "Pip") in kinds and ("say", "Pip") in kinds
     assert ("handoff", "Rex->Pip") in kinds  # a review asking for changes walks back to Pip
-    assert ("approve", "Rex") in kinds and kinds[-1] == ("done", "Quill")
+    assert ("approve", "Rex") in kinds and kinds[-1] == ("finale", "Quill")
     assert [a["id"] for a in actions] == list(range(len(actions)))
     assert office_actions([ev("error", "Run stopped")], "none")[0]["type"] == "fail"
     # the special analysts play Pip's part
@@ -55,7 +55,8 @@ def test_the_office_and_welcome_scenes_have_the_whole_team():
     for m in TEAM:
         assert f'id="m-{m.name}"' in svg
     spots = json.loads(html.unescape(re.search(r'data-spots="([^"]+)"', svg).group(1)))
-    assert set(spots) == {m.name for m in TEAM} | {"lounge"}
+    assert set(spots) == {m.name for m in TEAM} | {"lounge", "gather"}
+    assert len(spots["gather"]) == len(TEAM)
     lineup = team_lineup()
     assert all(m.name in lineup and m.role in lineup for m in TEAM)
     assert "done" in upload_icon(done=True) and "done" not in upload_icon()

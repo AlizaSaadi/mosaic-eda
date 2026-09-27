@@ -75,7 +75,7 @@ def main(example: str, label: str = "", fake: bool = False) -> Path:
         raise SystemExit(f"The run didn't finish ({state.status}): {state.error}")
     adapter = flow._adapter
     chart_ids = adapter.chart_ids if adapter else [a.id for a in rt.store.all("chart")]
-    charts = [rt.store.get(c).data["figure"] for c in chart_ids[:4]]
+    charts = [rt.store.get(c).data["figure"] for c in chart_ids[:6]]
     files = [state.outputs[k] for k in ("report", "pdf") if k in state.outputs]
     folder = replay.save_replay(
         replay.REPLAY_DIR / example,

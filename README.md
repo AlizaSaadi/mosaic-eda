@@ -21,7 +21,7 @@ fact-checks any dataset: tables, text, images, audio, and video, or a zip of the
 > to end, with review and revision loops; mixed zips can be analyzed type by type and then
 > linked; every report comes as HTML and PDF, with optional public share links; and the app
 > has a welcome screen, a live office where the agent team works, replays, and reviews
-> (Phase 9). Evaluation and launch are next.
+> (Phase 9, v0.9.1). Evaluation and launch are next.
 > The full design is in [`docs/MOSAIC-EDA-Blueprint.pdf`](docs/MOSAIC-EDA-Blueprint.pdf).
 
 ## How it works (short version)

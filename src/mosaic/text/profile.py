@@ -15,9 +15,9 @@ from itertools import pairwise
 
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 
 from mosaic.evidence.store import EvidenceStore
+from mosaic.reporting import charts
 from mosaic.tables.profile import r4
 from mosaic.text.pipeline_helpers import (
     STOPWORDS,
@@ -32,7 +32,6 @@ from mosaic.text.pipeline_helpers import (
     sentence_count,
     words,
 )
-from mosaic.ui.palette import HARVEST
 
 TOO_SHORT_WORDS = 5
 NEAR_THRESHOLD = 0.8
@@ -150,26 +149,8 @@ def categorize(df: pd.DataFrame, m: pd.DataFrame, main_language: str) -> dict[st
     return cats
 
 
-def _fig(fig: go.Figure, title: str) -> dict:
-    import json
-
-    fig.update_layout(
-        title=title,
-        template="plotly_white",
-        colorway=HARVEST["chart"],
-        height=340,
-        font={"family": "Inter, system-ui, sans-serif", "color": HARVEST["text"]},
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin={"l": 50, "r": 20, "t": 50, "b": 50},
-    )
-    return json.loads(fig.to_json())
-
-
-def _chart(store: EvidenceStore, name: str, title: str, fig: go.Figure, stage: str) -> str:
-    return store.add(
-        "chart", "chart", name, f"Chart: {title} ({stage})", {"figure": _fig(fig, title)}
-    ).id
+def _chart(store: EvidenceStore, name: str, title: str, figure: dict, stage: str) -> str:
+    return store.add("chart", "chart", name, f"Chart: {title} ({stage})", {"figure": figure}).id
 
 
 # ---- vector space: terms, topics, label check ----
@@ -460,9 +441,7 @@ def profile_text(
             {"stage": stage},
         )
         result.artifact_ids.append(a.id)
-        fig = go.Figure(
-            go.Bar(x=list(labelled), y=list(labelled.values()), marker_color=HARVEST["accent"])
-        )
+        fig = charts.class_balance(labelled, noun="documents", what=label_word)
         result.chart_ids.append(
             _chart(store, "label_balance", f"Documents per {label_word}", fig, stage)
         )
@@ -470,16 +449,9 @@ def profile_text(
     # length histogram
     values = m["words"]
     if len(values):
-        hist, edges = np.histogram(values, bins=min(30, max(5, len(values) // 4)))
-        fig = go.Figure(
-            go.Bar(
-                x=(edges[:-1] + edges[1:]) / 2,
-                y=hist,
-                width=np.diff(edges),
-                marker_color=HARVEST["chart"][1],
-            )
-        )
-        result.chart_ids.append(_chart(store, "words_hist", "Words per document", fig, stage))
+        fig = charts.histogram(list(values), title="Document length",
+                               x="Words per document", noun="documents")  # fmt: skip
+        result.chart_ids.append(_chart(store, "words_hist", "Document length", fig, stage))
 
     if stage == "raw":
         result.artifact_ids += _raw_only(df, m, store, result, main, labels, token_lists, stage)
@@ -600,13 +572,15 @@ def _raw_only(
     )
     top = unigrams.most_common(12)[::-1]
     if top:
-        fig = go.Figure(
-            go.Bar(
-                x=[c for _, c in top],
-                y=[t for t, _ in top],
-                orientation="h",
-                marker_color=HARVEST["chart"][2],
-            )
+        fig = charts.ranked_bars(
+            [t for t, _ in top],
+            [c for _, c in top],
+            title="Most frequent words",
+            x="Documents containing the word",
+            y="Word",
+            total=n,
+            color=2,
+            subtitle="Common filler words removed; share of all documents on each bar",
         )
         result.chart_ids.append(
             _chart(store, "top_words", "Documents containing each word", fig, stage)
@@ -615,8 +589,15 @@ def _raw_only(
     # language chart
     langs = Counter(m["language"])
     if len(langs) > 1:
-        fig = go.Figure(
-            go.Bar(x=list(langs), y=list(langs.values()), marker_color=HARVEST["chart"][3])
+        fig = charts.ranked_bars(
+            list(langs),
+            list(langs.values()),
+            title="Languages",
+            x="Number of documents",
+            y="Language code",
+            total=sum(langs.values()),
+            color=3,
+            subtitle=f"{len(langs)} languages detected",
         )
         result.chart_ids.append(_chart(store, "languages", "Documents per language", fig, stage))
 

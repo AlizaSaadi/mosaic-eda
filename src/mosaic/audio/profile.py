@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 import io
-import json
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 from PIL import Image
 
 from mosaic.audio.pipeline_helpers import decode, near_groups
 from mosaic.audio.transcribe import TranscriptionResult, label_matches
 from mosaic.evidence.store import EvidenceStore
+from mosaic.reporting import charts
 from mosaic.tables.profile import r4
 from mosaic.ui.palette import HARVEST
 
@@ -66,20 +65,6 @@ def categorize(df: pd.DataFrame) -> dict[str, list[str]]:
         cats[name] = files
         taken.update(files)
     return cats
-
-
-def _fig(fig: go.Figure, title: str) -> dict:
-    fig.update_layout(
-        title=title,
-        template="plotly_white",
-        colorway=HARVEST["chart"],
-        height=340,
-        font={"family": "Inter, system-ui, sans-serif", "color": HARVEST["text"]},
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin={"l": 50, "r": 20, "t": 50, "b": 50},
-    )
-    return json.loads(fig.to_json())
 
 
 def _colormap() -> np.ndarray:
@@ -217,16 +202,14 @@ def profile_audio(
             {"stage": stage},
         )
         result.artifact_ids.append(a.id)
-        fig = go.Figure(
-            go.Bar(x=list(labelled), y=list(labelled.values()), marker_color=HARVEST["accent"])
-        )
+        figure = charts.class_balance(labelled, noun="clips")
         result.chart_ids.append(
             store.add(
                 "chart",
                 "chart",
                 "class_balance",
                 f"Chart: clips per class ({stage})",
-                {"figure": _fig(fig, "Clips per class")},
+                {"figure": figure},
             ).id
         )
 
@@ -304,30 +287,22 @@ def profile_audio(
     )
     result.artifact_ids.append(a.id)
 
-    for column, title, color in (
-        ("duration_s", "Clip length (seconds)", 1),
-        ("rms_dbfs", "Loudness (dBFS)", 2),
-        ("snr_db", "SNR (dB)", 3),
+    for column, title, color, x in (
+        ("duration_s", "Clip length", 1, "Length (seconds)"),
+        ("rms_dbfs", "Loudness", 2, "Average loudness (dBFS; 0 is the loudest possible)"),
+        ("snr_db", "Signal-to-noise ratio", 3, "Signal-to-noise ratio (dB; higher is cleaner)"),
     ):
         values = ok[column].dropna()
         if values.empty:
             continue
-        counts_, edges = np.histogram(values, bins=20)
-        fig = go.Figure(
-            go.Bar(
-                x=(edges[:-1] + edges[1:]) / 2,
-                y=counts_,
-                width=np.diff(edges),
-                marker_color=HARVEST["chart"][color],
-            )
-        )
+        figure = charts.histogram(values.tolist(), title=title, x=x, noun="clips", color=color)
         result.chart_ids.append(
             store.add(
                 "chart",
                 "chart",
                 f"{column}_hist",
                 f"Chart: {title} ({stage})",
-                {"figure": _fig(fig, title)},
+                {"figure": figure},
             ).id
         )
 

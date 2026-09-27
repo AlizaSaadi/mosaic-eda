@@ -53,6 +53,9 @@ def test_group_mode_analyzes_each_type_and_links_them(tmp_path):
     assert state.status == "done", state.error
     assert [p["modality"] for p in state.parts] == ["table", "image"]
     assert all(p["status"] == "done" for p in state.parts)
+    titles = [c.data["figure"]["layout"]["title"]["text"] for c in rt.store.all("chart")]
+    assert titles[0] == "Data quality by type" and len(titles) == 5  # plus 2 per type
+    assert sum(t.startswith("Image: ") for t in titles) == 2
     links = rt.store.get("mix_links_001").data
     assert links["rows_missing_file"] == 3 and links["files_unreferenced"] == 4
     assert links["label_disagreements"] == 3

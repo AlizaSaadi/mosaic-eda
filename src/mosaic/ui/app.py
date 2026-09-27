@@ -35,7 +35,7 @@ EXAMPLE_AUDIO = PROJECT_ROOT / "examples" / "datasets" / "speech_commands.zip"
 EXAMPLE_TEXT = PROJECT_ROOT / "examples" / "datasets" / "support_tickets.zip"
 EXAMPLE_VIDEO = PROJECT_ROOT / "examples" / "datasets" / "pattern_clips.zip"
 EXAMPLE_MIXED = PROJECT_ROOT / "examples" / "datasets" / "shapes_survey.zip"
-MAX_PLOTS = 4
+MAX_PLOTS = 6
 POLL_SECONDS = 0.6
 SCREENS = ("welcome", "upload", "office", "results")
 
@@ -175,6 +175,15 @@ def show(screen: str) -> list:
     return [gr.update(visible=s == screen) for s in SCREENS]
 
 
+def plot_updates(figures: list[dict], color_blind: bool = False) -> list:
+    """One update per plot slot: the figures (recolored if asked), then hidden slots."""
+    plots = [
+        gr.update(value=pio.from_json(json.dumps(recolor(f) if color_blind else f)), visible=True)
+        for f in figures[:MAX_PLOTS]
+    ]
+    return plots + [gr.update(value=None, visible=False)] * (MAX_PLOTS - len(plots))
+
+
 def run_analysis(
     upload,
     url: str,
@@ -203,6 +212,8 @@ def run_analysis(
         choice=False,
         choice_text="",
         office=None,
+        skip=False,
+        figs=None,
     ):
         return (
             feed if feed is not None else [],
@@ -217,6 +228,8 @@ def run_analysis(
             choice_text,
             *show(screen),
             office if office is not None else gr.update(),
+            gr.update(visible=skip),
+            figs if figs is not None else gr.update(),
         )  # fmt: skip
 
     if not source:
@@ -278,10 +291,11 @@ def run_analysis(
         yield frame("upload", feed=feed, choice=True,
                     choice_text=choice_markdown(state.mixed_counts), office=office)  # fmt: skip
         return
-    # let the office finish its last scene (Quill's "Report ready!") before moving on
-    yield frame("office", feed=feed, counters=counters_text(runtime.reporter, started),
-                office=office)  # fmt: skip
-    time.sleep(4.0 if state.status == "done" else 3.5)
+    finished = state.status == "done"
+    if not finished:  # let the office show what went wrong before moving on
+        yield frame("office", feed=feed, counters=counters_text(runtime.reporter, started),
+                    office=office)  # fmt: skip
+        time.sleep(3.5)
     if "trace" not in state.outputs:  # failed runs still get their trace
         state.outputs["trace"] = str(runtime.reporter.write_trace(runtime.ws.out / "trace.json"))
     files = [
@@ -291,16 +305,14 @@ def run_analysis(
     ]
     adapter = flow._adapter
     chart_ids = adapter.chart_ids if adapter else [a.id for a in runtime.store.all("chart")]
-    plots = []
-    for chart_id in chart_ids[:MAX_PLOTS]:
-        figure = runtime.store.get(chart_id).data["figure"]
-        fig = pio.from_json(json.dumps(recolor(figure) if color_blind else figure))
-        plots.append(gr.update(value=fig, visible=True))
+    figures = [runtime.store.get(c).data["figure"] for c in chart_ids[:MAX_PLOTS]]
+    plots = plot_updates(figures, color_blind)
     pictures = adapter.gallery() if adapter and state.status == "done" else []
     gallery = gr.update(value=pictures or None, visible=bool(pictures))
-    plots += [gr.update(value=None, visible=False)] * (MAX_PLOTS - len(plots))
+    # a finished run stays in the office for the team's last scene; the office script (or
+    # the skip button) then moves on to the results, which are already filled in
     yield frame(
-        "results",
+        "office" if finished else "results",
         feed=feed,
         counters=counters_text(runtime.reporter, started),
         results=gr.update(value=results_markdown(state), visible=True),
@@ -309,6 +321,8 @@ def run_analysis(
         plots=plots,
         gallery=gallery,
         office=office,
+        skip=finished,
+        figs=figures,
     )
 
 
@@ -321,7 +335,7 @@ def replay_analysis(name: str, drink_kind: str = "tea", color_blind: bool = Fals
     job = f"replay-{name}-{time.time():.0f}"
     empty_plots = [gr.update(value=None, visible=False)] * MAX_PLOTS
 
-    def frame(screen, shown, *, results=None, tiles="", files=None, plots=None):
+    def frame(screen, shown, *, results=None, tiles="", files=None, plots=None, figs=None):
         return (
             [to_message(e) for e in shown],
             f"Replay of a recorded run · {len(shown)} of {len(events)} steps",
@@ -335,6 +349,8 @@ def replay_analysis(name: str, drink_kind: str = "tea", color_blind: bool = Fals
             "",
             *show(screen),
             office_state(job, shown, drink_kind),
+            gr.update(visible=figs is not None),
+            figs if figs is not None else gr.update(),
         )
 
     start = time.time()
@@ -345,20 +361,16 @@ def replay_analysis(name: str, drink_kind: str = "tea", color_blind: bool = Fals
             time.sleep(delay)
         shown.append(event)
         yield frame("office", shown)
-    time.sleep(5.0)  # the office's last scene
-    plots = []
-    for figure in data["charts"][:MAX_PLOTS]:
-        fig = pio.from_json(json.dumps(recolor(figure) if color_blind else figure))
-        plots.append(gr.update(value=fig, visible=True))
-    plots += [gr.update(value=None, visible=False)] * (MAX_PLOTS - len(plots))
+    figures = data["charts"][:MAX_PLOTS]
     note = "\n\n*This was a replay of a recorded run: no data was uploaded or analyzed.*"
-    yield frame(
-        "results",
+    yield frame(  # the office plays its last scene, then moves on (or the visitor skips)
+        "office",
         shown,
         results=gr.update(value=data["results_md"] + note, visible=True),
         tiles=data["tiles"],
         files=data["files"] or None,
-        plots=plots,
+        plots=plot_updates(figures, color_blind),
+        figs=figures,
     )
 
 
@@ -379,6 +391,32 @@ WELCOME = (
     f"{team_lineup()}"
     '<div class="ask">When your report is ready, I\'d love a quick review or a suggestion. '
     "It helps me make Mosaic better.</div></div>"
+)
+SUN = (
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 '
+    "1.5v3M12 19.5v3M1.5 12h3M19.5 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M4.6 19.4l2.1-2.1M17.3 "
+    '6.7l2.1-2.1"/></svg>'
+)
+MOON = (
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 '
+    '0 1 0 10.5 10.5z"/></svg>'
+)
+EYE = (
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 '
+    '7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3.2"/></svg>'
+)
+TOPBAR = (
+    '<div class="m-topbar"><div class="brand">Mosaic <span>EDA</span></div><div class="tools">'
+    f'<button type="button" class="m-tool" id="m-theme-btn" aria-pressed="false">'
+    f'<span class="when-light">{MOON}Night</span><span class="when-dark">{SUN}Day</span></button>'
+    f'<button type="button" class="m-tool" id="m-cb-btn" aria-pressed="false">{EYE}'
+    "Color-blind colors</button></div></div>"
+)
+HOUSE_RULE = (
+    '<div class="house-rule"><div class="k">Office rule no. 1</div>'
+    '<div class="t">Whatever you do, don\'t click an agent five times in a row.</div>'
+    "<div class=\"d\">They're working very hard, and they're a little sensitive about it. "
+    "(Go on. We know you want to.)</div></div>"
 )
 STEPS = (
     '<div class="steps">'
@@ -440,6 +478,9 @@ def send_review(stars, comment: str, name: str, results_md: str):
 def build_app() -> gr.Blocks:
     settings = get_settings()
     with gr.Blocks(title="Mosaic EDA") as demo:
+        gr.HTML(TOPBAR)
+        # the toolbar's color-blind button flips this, so runs and charts know about it
+        color_blind = gr.Checkbox(value=False, elem_id="m-cb", elem_classes="m-hidden")
         shared_view = gr.HTML(visible=False)
 
         with gr.Column(visible=True, elem_classes="m-screen") as welcome:
@@ -448,6 +489,7 @@ def build_app() -> gr.Blocks:
                 gr.HTML("")
                 start_btn = gr.Button("Start", variant="primary", size="lg", scale=0, min_width=200)
                 gr.HTML("")
+            gr.HTML(HOUSE_RULE)
 
         with gr.Column(visible=False, elem_classes="m-screen") as upload_screen:
             gr.HTML(STEPS)
@@ -486,7 +528,6 @@ def build_app() -> gr.Blocks:
                             type="password",
                             info="Used for this run only, never stored.",
                         )
-                        color_blind = gr.Checkbox(label="Color-blind-friendly colors", value=False)
                 with gr.Column(scale=2):
                     drink_kind = gr.Radio(
                         choices=[("Tea", "tea"), ("Coffee", "coffee"), ("No thanks", "none")],
@@ -522,6 +563,13 @@ def build_app() -> gr.Blocks:
 
         with gr.Column(visible=False, elem_classes="m-screen") as office_screen:
             gr.HTML(office_svg())
+            with gr.Row():
+                gr.HTML("")
+                skip_btn = gr.Button(
+                    "Skip to my report", visible=False, size="sm", scale=0, min_width=180
+                )
+                gr.HTML("")
+            to_results = gr.Button("results", elem_id="to-results", elem_classes="m-hidden")
             counters = gr.Markdown("")
             with gr.Accordion("What are the agents doing?", open=False):
                 feed = gr.Chatbot(label="Live log", height=380)
@@ -533,7 +581,7 @@ def build_app() -> gr.Blocks:
             plots = []
             for _ in range(MAX_PLOTS // 2):  # two charts per row
                 with gr.Row():
-                    plots += [gr.Plot(visible=False), gr.Plot(visible=False)]
+                    plots += [gr.Plot(visible=False, show_label=False) for _ in range(2)]
             gallery = gr.Gallery(
                 label="Contact sheets, keyframes, or spectrograms",
                 visible=False,
@@ -569,9 +617,10 @@ def build_app() -> gr.Blocks:
         )
 
         screens = [welcome, upload_screen, office_screen, results_screen]
+        figures = gr.State([])
         outputs = [
             feed, counters, results, tiles, downloads, *plots, gallery, runs_left, choice_panel,
-            choice_text, *screens, office_box,
+            choice_text, *screens, office_box, skip_btn, figures,
         ]  # fmt: skip
         ask = gr.State("ask")
         common = [upload, url, goal, user_key]
@@ -582,9 +631,13 @@ def build_app() -> gr.Blocks:
         upload.change(lambda f: upload_icon(done=bool(f)), upload, upload_art)
         drink_kind.change(drink_html, drink_kind, drink_art)
         color_blind.change(
-            None, color_blind, None,
-            js="(on) => { document.body.classList.toggle('cb-safe', on); return []; }",
+            plot_updates, [figures, color_blind], plots,
+            js="(figs, on) => { window.mosaicColorBlind(on); return [figs, on]; }",
         )  # fmt: skip
+        for button in (skip_btn, to_results):
+            button.click(
+                lambda: [*show("results"), gr.update(visible=False)], None, [*screens, skip_btn]
+            )
         run_btn.click(run_analysis, [*common, ask, *extra], outputs)
         continue_btn.click(run_analysis, [*common, mixed, *extra], outputs)
         for button, path, example_goal in example_btns:

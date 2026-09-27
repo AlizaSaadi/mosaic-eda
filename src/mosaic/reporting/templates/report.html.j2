@@ -253,7 +253,19 @@ const charts = {{ charts_json|safe }};
 const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 charts.forEach((fig, i) => {
   const layout = Object.assign({}, fig.layout, {autosize: true});
-  if (dark) { layout.font = Object.assign({}, layout.font, {color: '#F3E9DC'}); }
+  if (dark) {  // titles, axis titles, and labels carry their own colors: lighten them all
+    const light = '#F3E9DC', soft = '#C9B497', grid = 'rgba(243,233,220,.14)';
+    const tint = (o, color) => Object.assign({}, o, {font: Object.assign({}, (o || {}).font, {color})});
+    layout.font = Object.assign({}, layout.font, {color: light});
+    if (layout.title && typeof layout.title === 'object') {
+      layout.title = tint(layout.title, light);
+      if (layout.title.subtitle) layout.title.subtitle = tint(layout.title.subtitle, soft);
+    }
+    ['xaxis', 'yaxis'].forEach((ax) => {
+      if (layout[ax]) layout[ax] = Object.assign({}, layout[ax], {gridcolor: grid, title: tint(layout[ax].title, soft)});
+    });
+    layout.annotations = (layout.annotations || []).map((a) => tint(a, light));
+  }
   Plotly.newPlot('chart' + (i + 1), fig.data, layout, {displaylogo: false, responsive: true});
 });
 </script>
